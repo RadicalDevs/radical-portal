@@ -64,7 +64,7 @@ function IntroScreen({
     <div className="space-y-8">
       {/* Title */}
       <div>
-        <h1 className="font-heading text-4xl font-bold text-heading sm:text-5xl">
+        <h1 className="font-heading text-3xl font-bold text-heading sm:text-4xl md:text-5xl">
           {c.intro_title}
         </h1>
       </div>
@@ -316,7 +316,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
       {/* Question card */}
       {currentQuestion && (
         <div className="rounded-[12px] border border-surface-border bg-surface p-6 shadow-sm sm:p-8">
-          <h2 className="text-xl font-medium leading-relaxed text-heading">
+          <h2 className="text-lg font-medium leading-relaxed text-heading sm:text-xl">
             {currentQuestion.question_text}
           </h2>
           <div className="mt-6 space-y-3">
@@ -339,7 +339,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
                   }
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
                       isSelected
                         ? "border-current bg-current"
                         : "border-surface-border group-hover:border-gray-500"
@@ -355,7 +355,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
                   >
                     {isSelected && (
                       <svg
-                        className="h-3 w-3 text-white"
+                        className="h-3.5 w-3.5 text-white"
                         fill="currentColor"
                         viewBox="0 0 12 12"
                       >
@@ -381,7 +381,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
         <button
           onClick={goBack}
           disabled={currentIndex === 0}
-          className="flex items-center gap-1 rounded-[8px] px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-label disabled:cursor-not-allowed disabled:opacity-30"
+          className="flex min-h-[44px] items-center gap-1 rounded-[8px] px-4 py-3 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-label disabled:cursor-not-allowed disabled:opacity-30"
         >
           <svg
             className="h-4 w-4"
@@ -436,7 +436,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
           <button
             onClick={goForward}
             disabled={!currentAnswered}
-            className="flex items-center gap-1 rounded-[8px] px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-label disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex min-h-[44px] items-center gap-1 rounded-[8px] px-4 py-3 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-label disabled:cursor-not-allowed disabled:opacity-30"
           >
             Volgende
             <svg

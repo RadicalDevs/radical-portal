@@ -13,7 +13,7 @@ export default function ScoreCard({ dimension, score, description }: ScoreCardPr
   const percentage = scoreToPercentage(score);
 
   return (
-    <div className="rounded-[8px] border border-surface-border bg-surface p-6 shadow-sm">
+    <div className="rounded-[8px] border border-surface-border bg-surface p-4 shadow-sm sm:p-6">
       <div className="flex items-center justify-between">
         <h3 className="font-heading font-bold" style={{ color }}>
           {label}

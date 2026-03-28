@@ -60,7 +60,7 @@ export default function ResultsClient({ scores, gecombineerd }: Props) {
 
       {/* Radar Chart */}
       <div className="mt-8 flex justify-center">
-        <RadarChart scores={scores} size={360} animated />
+        <RadarChart scores={scores} maxSize={360} animated />
       </div>
 
       {/* Score Cards */}

@@ -39,7 +39,7 @@ export default async function ApacResultsPage({
         <ResultsClient scores={results.scores} gecombineerd={results.gecombineerd} />
 
         {/* CTA Block */}
-        <div className="mt-12 rounded-[12px] border border-smaragd/30 bg-gradient-to-br from-smaragd/10 to-surface p-8 text-center sm:p-10">
+        <div className="mt-12 rounded-[12px] border border-smaragd/30 bg-gradient-to-br from-smaragd/10 to-surface p-5 text-center sm:p-8 md:p-10">
           <h2 className="font-heading text-2xl font-bold text-heading">
             Wil je meer weten?
           </h2>

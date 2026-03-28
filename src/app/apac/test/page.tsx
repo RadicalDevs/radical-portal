@@ -32,6 +32,7 @@ export default async function ApacTestPage() {
           width: "65%", height: "65%",
           background: "radial-gradient(ellipse at center, rgba(46,213,115,0.20) 0%, rgba(46,213,115,0.07) 40%, transparent 65%)",
           filter: "blur(60px)",
+          willChange: "filter",
         }} />
         {/* Coral — bottom right */}
         <div style={{
@@ -39,6 +40,7 @@ export default async function ApacTestPage() {
           width: "70%", height: "70%",
           background: "radial-gradient(ellipse at center, rgba(230,115,79,0.16) 0%, rgba(230,115,79,0.05) 40%, transparent 65%)",
           filter: "blur(72px)",
+          willChange: "filter",
         }} />
         {/* Smaragd accent — top right */}
         <div style={{
@@ -46,6 +48,7 @@ export default async function ApacTestPage() {
           width: "35%", height: "40%",
           background: "radial-gradient(ellipse at center, rgba(46,213,115,0.09) 0%, transparent 60%)",
           filter: "blur(48px)",
+          willChange: "filter",
         }} />
         {/* Dot pattern */}
         <div style={{

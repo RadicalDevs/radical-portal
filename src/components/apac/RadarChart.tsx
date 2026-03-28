@@ -12,7 +12,7 @@
  * Gradient fill van smaragd → coral voor de brand identity.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Radar,
   RadarChart as RechartsRadarChart,
@@ -26,7 +26,7 @@ import type { ApacDimension } from "@/lib/apac/types";
 
 interface RadarChartProps {
   scores: ApacScores;
-  size?: number;
+  maxSize?: number;
   animated?: boolean;
 }
 
@@ -40,10 +40,12 @@ const LABEL_TO_DIM: Record<string, ApacDimension> = {
 
 export default function RadarChart({
   scores,
-  size = 360,
+  maxSize = 360,
   animated = true,
 }: RadarChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
+  const [measuredSize, setMeasuredSize] = useState(maxSize);
   const [animatedScores, setAnimatedScores] = useState<ApacScores>(
     animated
       ? { adaptability: 0, personality: 0, awareness: 0, connection: 0 }
@@ -58,11 +60,22 @@ export default function RadarChart({
     }
   }, [scores, animated]);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0].contentRect.width;
+      if (w > 0) setMeasuredSize(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (!mounted) {
     return (
       <div
-        className="flex items-center justify-center"
-        style={{ width: size, height: size }}
+        className="mx-auto flex aspect-square w-full items-center justify-center"
+        style={{ maxWidth: maxSize }}
       >
         <div className="h-16 w-16 animate-pulse rounded-full bg-smaragd/10" />
       </div>
@@ -76,8 +89,14 @@ export default function RadarChart({
     { dimension: DIMENSION_LABELS.connection, score: animatedScores.connection, fullMark: 10 },
   ];
 
+  const center = measuredSize / 2;
+
   return (
-    <div className="relative" style={{ width: size, height: size }}>
+    <div
+      ref={containerRef}
+      className="relative mx-auto aspect-square w-full"
+      style={{ maxWidth: maxSize }}
+    >
       {/* Multi-color glow behind chart */}
       <div
         className="absolute inset-0 rounded-full opacity-25 blur-[50px]"
@@ -108,6 +127,7 @@ export default function RadarChart({
                   value={payload.value}
                   score={data.find((d) => d.dimension === payload.value)?.score ?? 0}
                   color={color}
+                  center={center}
                 />
               );
             }}
@@ -148,19 +168,20 @@ function CustomAxisTick({
   value,
   score,
   color,
+  center,
 }: {
   x: number;
   y: number;
   value: string;
   score: number;
   color: string;
+  center: number;
 }) {
   const percentage = Math.round(score * 10);
+  const isSmall = center < 160;
 
-  const offset = 20;
-  const centerX = 180;
-  const centerY = 180;
-  const angle = Math.atan2(y - centerY, x - centerX);
+  const offset = center * 0.055;
+  const angle = Math.atan2(y - center, x - center);
   const labelX = x + Math.cos(angle) * offset;
   const labelY = y + Math.sin(angle) * offset;
 
@@ -170,8 +191,11 @@ function CustomAxisTick({
         x={labelX}
         y={labelY - 8}
         textAnchor="middle"
-        className="fill-label text-xs font-semibold"
-        style={{ fontFamily: "'Afacad Flux', sans-serif" }}
+        className="fill-label font-semibold"
+        style={{
+          fontFamily: "'Afacad Flux', sans-serif",
+          fontSize: isSmall ? 10 : 12,
+        }}
       >
         {value}
       </text>
@@ -179,8 +203,12 @@ function CustomAxisTick({
         x={labelX}
         y={labelY + 8}
         textAnchor="middle"
-        className="text-sm font-bold"
-        style={{ fill: color, fontFamily: "'Afacad Flux', sans-serif" }}
+        className="font-bold"
+        style={{
+          fill: color,
+          fontFamily: "'Afacad Flux', sans-serif",
+          fontSize: isSmall ? 12 : 14,
+        }}
       >
         {percentage}%
       </text>

@@ -287,7 +287,7 @@ function DetailModal({
 
         {scores ? (
           <div className="mt-6 flex justify-center">
-            <RadarChart scores={scores} size={240} animated />
+            <RadarChart scores={scores} maxSize={240} animated />
           </div>
         ) : (
           <div className="mt-6 rounded-xl bg-surface-light p-6 text-center text-sm text-muted">

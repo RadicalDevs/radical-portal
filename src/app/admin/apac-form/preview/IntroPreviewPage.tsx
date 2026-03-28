@@ -55,6 +55,7 @@ function PreviewBackground() {
           background: "radial-gradient(ellipse at center, rgba(46,213,115,0.22) 0%, rgba(46,213,115,0.08) 35%, transparent 65%)",
           filter: "blur(48px)",
           pointerEvents: "none",
+          willChange: "filter",
         }}
       />
       {/* Coral blob — bottom right */}
@@ -68,6 +69,7 @@ function PreviewBackground() {
           background: "radial-gradient(ellipse at center, rgba(230,115,79,0.18) 0%, rgba(230,115,79,0.06) 35%, transparent 65%)",
           filter: "blur(64px)",
           pointerEvents: "none",
+          willChange: "filter",
         }}
       />
       {/* Smaragd accent — top right */}
@@ -81,6 +83,7 @@ function PreviewBackground() {
           background: "radial-gradient(ellipse at center, rgba(46,213,115,0.10) 0%, transparent 60%)",
           filter: "blur(40px)",
           pointerEvents: "none",
+          willChange: "filter",
         }}
       />
       {/* Subtle coral — mid left */}
@@ -94,6 +97,7 @@ function PreviewBackground() {
           background: "radial-gradient(ellipse at center, rgba(230,115,79,0.08) 0%, transparent 60%)",
           filter: "blur(40px)",
           pointerEvents: "none",
+          willChange: "filter",
         }}
       />
       {/* Dot pattern */}
@@ -231,7 +235,7 @@ export default function IntroPreviewPage({
             {stage === "intro" && (
               <div className="space-y-8">
                 <h1
-                  className="font-heading text-4xl font-bold sm:text-5xl"
+                  className="font-heading text-3xl font-bold sm:text-4xl md:text-5xl"
                   style={{ color: headingColor }}
                 >
                   {c.intro_title}
@@ -326,7 +330,7 @@ export default function IntroPreviewPage({
                   className="rounded-[12px] p-6 shadow-sm sm:p-8"
                   style={{ background: surfaceColor, border: `1px solid ${borderColor}`, backdropFilter: "blur(16px)" }}
                 >
-                  <h2 className="text-xl font-medium leading-relaxed" style={{ color: headingColor }}>
+                  <h2 className="text-lg font-medium leading-relaxed sm:text-xl" style={{ color: headingColor }}>
                     {currentQuestion.question_text}
                   </h2>
                   <div className="mt-6 space-y-3">
@@ -344,14 +348,14 @@ export default function IntroPreviewPage({
                           }}
                         >
                           <span
-                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all"
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all"
                             style={{
                               borderColor: isSelected ? currentDimColor : "rgba(255,255,255,0.2)",
                               backgroundColor: isSelected ? currentDimColor : "transparent",
                             }}
                           >
                             {isSelected && (
-                              <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 12 12">
+                              <svg className="h-3.5 w-3.5 text-white" fill="currentColor" viewBox="0 0 12 12">
                                 <path d="M10.28 2.28a.75.75 0 00-1.06-1.06L4.5 5.94 2.78 4.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.06 0l5.25-5.25z" />
                               </svg>
                             )}
@@ -373,7 +377,7 @@ export default function IntroPreviewPage({
                   <button
                     onClick={() => currentIndex > 0 && setCurrentIndex((p) => p - 1)}
                     disabled={currentIndex === 0}
-                    className="flex items-center gap-1 rounded-[8px] px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                    className="flex min-h-[44px] items-center gap-1 rounded-[8px] px-4 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                     style={{ color: mutedColor }}
                   >
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -394,7 +398,7 @@ export default function IntroPreviewPage({
                     <button
                       onClick={() => !isLastQuestion && setCurrentIndex((p) => p + 1)}
                       disabled={!currentAnswered}
-                      className="flex items-center gap-1 rounded-[8px] px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                      className="flex min-h-[44px] items-center gap-1 rounded-[8px] px-4 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                       style={{ color: mutedColor }}
                     >
                       Volgende

@@ -143,7 +143,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
             <div className="relative mt-6 grid items-center gap-6 lg:grid-cols-[240px_1fr]">
               {/* Radar */}
               <div className="flex justify-center">
-                <RadarChart scores={liveScores} size={220} animated />
+                <RadarChart scores={liveScores} maxSize={220} animated />
               </div>
 
               {/* Scores + CTA */}
