@@ -20,9 +20,9 @@ export default function Navigation() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      setIsLoggedIn(!!data.session);
-    });
+    // Use only onAuthStateChange — it fires INITIAL_SESSION immediately
+    // with the restored session. Avoids race condition with getSession()
+    // returning null before token refresh completes.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(!!session);
     });

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import confetti from "canvas-confetti";
 import RadarChart from "@/components/apac/RadarChart";
 import ScoreCard from "@/components/apac/ScoreCard";
 import type { ApacScores, ApacDimension } from "@/lib/apac/types";
@@ -132,10 +133,47 @@ export default function ResultsClient({ scores, gecombineerd }: Props) {
     return () => timers.forEach(clearTimeout);
   }, [phase]);
 
-  // Phase 3: Animate combined score counter
+  // Phase 3: Confetti + animate combined score counter
+  const confettiFired = useRef(false);
   useEffect(() => {
     if (phase < PHASE_FINAL) return;
     const showTimer = setTimeout(() => setShowFinal(true), 200);
+
+    // Fire confetti when final score appears
+    if (!confettiFired.current) {
+      confettiFired.current = true;
+      setTimeout(() => {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { x: 0.15, y: 0.6 },
+          colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
+          angle: 60,
+          gravity: 0.8,
+          ticks: 200,
+        });
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { x: 0.85, y: 0.6 },
+          colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
+          angle: 120,
+          gravity: 0.8,
+          ticks: 200,
+        });
+      }, 300);
+      setTimeout(() => {
+        confetti({
+          particleCount: 50,
+          spread: 120,
+          origin: { x: 0.5, y: 0.3 },
+          colors: ["#2ed573", "#5ee89a", "#E6734F"],
+          gravity: 0.6,
+          ticks: 250,
+          startVelocity: 25,
+        });
+      }, 700);
+    }
 
     const target = scoreToPercentage(gecombineerd);
     const duration = 1500;

@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
+import confetti from "canvas-confetti";
 import RadarChart from "@/components/apac/RadarChart";
 import { useRealtimeApac } from "@/hooks/useRealtimeApac";
 import { calculateCombinedScore, scoreToPercentage, DIMENSION_LABELS, DIMENSION_COLORS } from "@/lib/apac/scoring";
@@ -185,6 +186,66 @@ export default function ResultsClient({
     );
     return () => timers.forEach(clearTimeout);
   }, [alwaysSplash]);
+
+  // Fire confetti cannon when big score appears
+  const confettiFired = useRef(false);
+  useEffect(() => {
+    if (splashStage === 5 && !confettiFired.current) {
+      confettiFired.current = true;
+
+      // First burst — left cannon
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { x: 0.15, y: 0.6 },
+        colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
+        angle: 60,
+        gravity: 0.8,
+        ticks: 200,
+        scalar: 1.1,
+      });
+
+      // Second burst — right cannon
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { x: 0.85, y: 0.6 },
+        colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
+        angle: 120,
+        gravity: 0.8,
+        ticks: 200,
+        scalar: 1.1,
+      });
+
+      // Third burst — center rain (delayed)
+      setTimeout(() => {
+        confetti({
+          particleCount: 50,
+          spread: 120,
+          origin: { x: 0.5, y: 0.3 },
+          colors: ["#2ed573", "#5ee89a", "#E6734F", "#8B5CF6"],
+          gravity: 0.6,
+          ticks: 250,
+          scalar: 0.9,
+          startVelocity: 25,
+        });
+      }, 400);
+
+      // Fourth burst — small sparkle burst (delayed more)
+      setTimeout(() => {
+        confetti({
+          particleCount: 30,
+          spread: 360,
+          origin: { x: 0.5, y: 0.5 },
+          colors: ["#2ed573", "#ffffff"],
+          gravity: 0.4,
+          ticks: 150,
+          scalar: 0.7,
+          startVelocity: 15,
+        });
+      }, 900);
+    }
+  }, [splashStage]);
 
   if (!scores) return null;
 
