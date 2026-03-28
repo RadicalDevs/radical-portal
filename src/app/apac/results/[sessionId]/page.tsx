@@ -35,8 +35,10 @@ export default async function ApacResultsPage({
         {/* Chapeau */}
         <ChapeauText gecombineerd={results.gecombineerd} />
 
-        {/* Radar Chart + Score Cards (client for animation) */}
-        <ResultsClient scores={results.scores} gecombineerd={results.gecombineerd} />
+        {/* Splash → Radar Chart → Score Cards → Combined Score (all animated) */}
+        <div className="mt-8">
+          <ResultsClient scores={results.scores} gecombineerd={results.gecombineerd} />
+        </div>
 
         {/* CTA Block */}
         <div className="mt-12 rounded-[12px] border border-smaragd/30 bg-gradient-to-br from-smaragd/10 to-surface p-5 text-center sm:p-8 md:p-10">

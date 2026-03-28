@@ -157,7 +157,7 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
                 </div>
 
                 {/* Mini score bars */}
-                <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3">
+                <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-x-6">
                   {DIMENSIONS.map((dim) => {
                     const pct = scoreToPercentage(liveScores[dim.key]);
                     return (

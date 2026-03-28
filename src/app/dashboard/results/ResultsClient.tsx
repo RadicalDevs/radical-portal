@@ -154,7 +154,8 @@ export default function ResultsClient({
   const combined = scores ? calculateCombinedScore(scores) : 0;
 
   // Always show splash for vpz1997, otherwise once per session
-  const alwaysSplash = initialScores && kandidaatId === "60731f07-8152-4b46-b834-3f6f15c83874";
+  const ALWAYS_SPLASH_IDS = ["60731f07-8152-4b46-b834-3f6f15c83874", "c0f060b1-cbf2-4353-b39c-db17f019d00b"];
+  const alwaysSplash = initialScores && ALWAYS_SPLASH_IDS.includes(kandidaatId);
 
   useEffect(() => {
     const key = "radical-results-seen";
@@ -163,15 +164,15 @@ export default function ResultsClient({
       return;
     }
     const stages: [number, number][] = [
-      [600, 1],     // Vertical line draws
-      [2000, 2],    // "We hebben je geanalyseerd"
-      [3500, 3],    // Dimensions appear one by one
-      [5500, 4],    // Everything clears, "Jouw score"
-      [6500, 5],    // Big number counts up
-      [9500, 6],    // Dimension breakdown
-      [12000, 7],   // Quote / message
-      [14000, 8],   // Fade out
-      [15200, 9],   // Done
+      [800, 1],      // Glow + line starts
+      [2800, 2],     // "We hebben je geanalyseerd"
+      [5000, 3],     // Dimensions appear one by one
+      [7500, 4],     // Everything clears, "Jouw score" text
+      [9000, 5],     // Big number counts up
+      [12500, 6],    // Dimension breakdown bars
+      [16000, 7],    // Quote / message
+      [18500, 8],    // Fade out begins
+      [20000, 9],    // Done
     ];
     const timers = stages.map(([ms, stage]) =>
       setTimeout(() => {
@@ -187,7 +188,17 @@ export default function ResultsClient({
 
   if (!scores) return null;
 
-  // ---- CINEMATIC SPLASH (15s) ----
+  // ---- CINEMATIC SPLASH (20s) ----
+  // Each scene is fully isolated — only ONE scene renders at a time. No overlap.
+  const scene =
+    splashStage < 2 ? 0 :   // empty, glows building
+    splashStage < 4 ? 1 :   // intro text + dimensions
+    splashStage < 5 ? 2 :   // "dit is jouw score" title
+    splashStage < 6 ? 3 :   // big number counting
+    splashStage < 7 ? 4 :   // dimension breakdown bars
+    splashStage < 8 ? 5 :   // quote
+    6;                       // fade out
+
   if (!splashDone) {
     const pct = scoreToPercentage(combined);
     return (
@@ -217,223 +228,101 @@ export default function ResultsClient({
           transition={{ duration: 4, delay: 2, ease: "easeOut" }}
         />
 
-        {/* ── Stage 1: Vertical line draws down ── */}
-        <AnimatePresence>
-          {splashStage >= 1 && splashStage < 4 && (
-            <motion.div
-              key="vline"
-              className="absolute left-1/2 top-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-smaragd/50 via-coral/30 to-transparent"
-              initial={{ height: 0, y: -100 }}
-              animate={{ height: 200, y: -100 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.2, ease: "easeOut" }}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* ── Horizontal accent lines ── */}
+        {/* ── Ambient lines ── */}
         <motion.div
-          className="absolute left-1/2 top-1/2 h-px -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-transparent via-smaragd/20 to-transparent"
-          initial={{ width: 0 }}
-          animate={{ width: "90%" }}
-          transition={{ duration: 2.5, ease: "easeOut" }}
+          className="absolute left-1/2 top-1/2 h-px -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-transparent via-smaragd/15 to-transparent"
+          initial={{ width: 0, opacity: 0 }}
+          animate={{ width: "85%", opacity: 1 }}
+          transition={{ duration: 3, ease: "easeOut" }}
+        />
+        <motion.div
+          className="absolute left-1/2 top-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-coral/10 to-transparent"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 300, opacity: splashStage < 4 ? 1 : 0 }}
+          transition={{ duration: splashStage < 4 ? 2.5 : 1.5, ease: "easeInOut" }}
+          style={{ y: -150 }}
         />
 
-        <div className="relative z-10 flex flex-col items-center px-6 text-center">
+        {/* Only the active scene renders — no overlap */}
 
-          {/* ── Stage 2: "We hebben je geanalyseerd" ── */}
-          <AnimatePresence mode="wait">
-            {splashStage >= 2 && splashStage < 4 && (
-              <motion.div
-                key="intro"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.8 }}
-                className="flex flex-col items-center"
-              >
-                <motion.p
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8 }}
-                  className="text-xs font-medium tracking-[0.2em] uppercase text-muted/70"
-                >
-                  APAC Assessment voltooid
-                </motion.p>
-                <motion.p
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: 0.3 }}
-                  className="mt-4 font-heading text-xl font-bold text-heading sm:text-2xl"
-                >
-                  We hebben je geanalyseerd op vier dimensies
-                </motion.p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── Stage 3: Dimensions appear one by one ── */}
-          <AnimatePresence mode="wait">
-            {splashStage >= 3 && splashStage < 4 && (
-              <motion.div
-                key="dims-intro"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.6 }}
-                className="mt-8 flex flex-wrap items-center justify-center gap-3 sm:gap-5"
-              >
+        {/* Scene 1: Intro + dimensions */}
+        {scene === 1 && (
+          <motion.div key="s1" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0 }}>
+            <p className="text-xs font-medium tracking-[0.25em] uppercase text-muted/60">APAC Assessment voltooid</p>
+            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0, delay: 0.3 }} className="mt-5 font-heading text-xl font-bold text-heading sm:text-2xl">We hebben je geanalyseerd op vier dimensies</motion.p>
+            {splashStage >= 3 && (
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6">
                 {DIMENSIONS.map((dim, i) => (
-                  <motion.div
-                    key={dim.key}
-                    initial={{ opacity: 0, scale: 0.5, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: i * 0.25, ease: [0.16, 1, 0.3, 1] }}
-                    className="flex items-center gap-2"
-                  >
-                    <motion.div
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: dim.color }}
-                      animate={{ scale: [1, 1.3, 1] }}
-                      transition={{ duration: 1.5, delay: i * 0.25 + 0.4, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                    <span className="font-heading text-lg font-bold sm:text-xl" style={{ color: dim.color }}>
-                      {dim.label}
-                    </span>
+                  <motion.div key={dim.key} initial={{ opacity: 0, scale: 0.3, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.8, delay: i * 0.3, ease: [0.16, 1, 0.3, 1] }} className="flex items-center gap-2.5">
+                    <motion.div className="h-3 w-3 rounded-full" style={{ backgroundColor: dim.color }} animate={{ scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }} transition={{ duration: 2, delay: i * 0.3, repeat: Infinity, ease: "easeInOut" }} />
+                    <span className="font-heading text-lg font-bold sm:text-xl" style={{ color: dim.color }}>{dim.label}</span>
                   </motion.div>
                 ))}
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
+          </motion.div>
+        )}
 
-          {/* ── Stage 4+5: Score reveal ── */}
-          <AnimatePresence mode="wait">
-            {splashStage >= 4 && splashStage < 8 && (
-              <motion.div
-                key="score-reveal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.6 }}
-                className="flex flex-col items-center"
-              >
-                <motion.p
-                  initial={{ opacity: 0, letterSpacing: "0.5em" }}
-                  animate={{ opacity: 1, letterSpacing: "0.2em" }}
-                  transition={{ duration: 1.0 }}
-                  className="text-xs font-semibold uppercase text-smaragd"
-                >
-                  {firstName}, dit is jouw score
-                </motion.p>
+        {/* Scene 2: Score title */}
+        {scene === 2 && (
+          <motion.div key="s2" className="relative z-10 px-6 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.0 }}>
+            <motion.p initial={{ letterSpacing: "0.6em", opacity: 0 }} animate={{ letterSpacing: "0.2em", opacity: 1 }} transition={{ duration: 1.5, ease: "easeOut" }} className="text-sm font-semibold uppercase text-smaragd">{firstName}, dit is jouw score</motion.p>
+          </motion.div>
+        )}
 
-                {splashStage >= 5 && (
-                  <motion.div
-                    initial={{ scale: 0.2, opacity: 0, filter: "blur(20px)" }}
-                    animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
-                    transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
-                    className="mt-8"
-                  >
-                    <SplashCounter target={pct} />
+        {/* Scene 3: Big number reveal */}
+        {scene === 3 && (
+          <motion.div key="s3" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-smaragd">{firstName}, dit is jouw score</p>
+            <motion.div className="mt-8" initial={{ scale: 0.1, opacity: 0, filter: "blur(30px)" }} animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }} transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}>
+              <SplashCounter target={pct} />
+            </motion.div>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2.0, duration: 1.0 }} className="mt-4 text-sm text-muted">gecombineerde APAC-score</motion.p>
+          </motion.div>
+        )}
+
+        {/* Scene 4: Dimension bars */}
+        {scene === 4 && (
+          <motion.div key="s4" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0 }}>
+            <p className="mb-8 text-sm font-semibold uppercase tracking-[0.2em] text-smaragd">Je dimensies in detail</p>
+            <div className="grid w-full max-w-lg grid-cols-1 gap-y-5 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-6">
+              {DIMENSIONS.map((dim, i) => {
+                const dimPct = scoreToPercentage(scores[dim.key]);
+                return (
+                  <motion.div key={dim.key} initial={{ opacity: 0, x: i % 2 === 0 ? -40 : 40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: i * 0.2 }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: dim.color }} />
+                        <span className="text-sm font-semibold" style={{ color: dim.color }}>{dim.label}</span>
+                      </div>
+                      <span className="font-heading text-lg font-bold text-heading">{dimPct}%</span>
+                    </div>
+                    <div className="mt-2.5 h-2 w-full rounded-full bg-surface-light/15 overflow-hidden">
+                      <motion.div className="h-full rounded-full" style={{ backgroundColor: dim.color }} initial={{ width: 0 }} animate={{ width: `${dimPct}%` }} transition={{ duration: 1.5, delay: 0.3 + i * 0.2 }} />
+                    </div>
                   </motion.div>
-                )}
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
 
-                {splashStage >= 5 && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 2.0, duration: 0.8 }}
-                    className="mt-3 text-sm text-muted"
-                  >
-                    gecombineerde APAC-score
-                  </motion.p>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* Scene 5: Quote */}
+        {scene === 5 && (
+          <motion.div key="s5" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.2 }}>
+            <motion.div className="h-px bg-gradient-to-r from-transparent via-smaragd/30 to-transparent" initial={{ width: 0 }} animate={{ width: 80 }} transition={{ duration: 1.0 }} />
+            <p className="mt-8 font-heading text-2xl italic text-heading/80 leading-relaxed sm:text-3xl">&ldquo;AI is everywhere.<br />The human factor is rare.&rdquo;</p>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 1.0 }} className="mt-5 text-sm text-muted">Je bent meer dan een CV. Bekijk nu wat jou uniek maakt.</motion.p>
+          </motion.div>
+        )}
 
-          {/* ── Stage 6: Dimension breakdown ── */}
-          <AnimatePresence>
-            {splashStage >= 6 && splashStage < 8 && (
-              <motion.div
-                key="breakdown"
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8 }}
-                className="mt-12 grid w-full max-w-lg grid-cols-2 gap-x-10 gap-y-5"
-              >
-                {DIMENSIONS.map((dim, i) => {
-                  const dimPct = scoreToPercentage(scores[dim.key]);
-                  return (
-                    <motion.div
-                      key={dim.key}
-                      initial={{ opacity: 0, x: i % 2 === 0 ? -40 : 40 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.6, delay: i * 0.15, ease: [0.25, 0.1, 0.25, 1] }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: dim.color }} />
-                          <span className="text-sm font-semibold" style={{ color: dim.color }}>{dim.label}</span>
-                        </div>
-                        <span className="font-heading text-lg font-bold text-heading">{dimPct}%</span>
-                      </div>
-                      <div className="mt-2 h-2 w-full rounded-full bg-surface-light/20 overflow-hidden">
-                        <motion.div
-                          className="h-full rounded-full"
-                          style={{ backgroundColor: dim.color }}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${dimPct}%` }}
-                          transition={{ duration: 1.2, delay: 0.3 + i * 0.15, ease: [0.25, 0.1, 0.25, 1] }}
-                        />
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── Stage 7: Inspirational message ── */}
-          <AnimatePresence>
-            {splashStage >= 7 && splashStage < 8 && (
-              <motion.div
-                key="quote"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8 }}
-                className="mt-12 max-w-md"
-              >
-                <motion.div
-                  className="mx-auto h-px w-16 bg-gradient-to-r from-transparent via-smaragd/40 to-transparent"
-                  initial={{ width: 0 }}
-                  animate={{ width: 64 }}
-                  transition={{ duration: 0.6 }}
-                />
-                <p className="mt-4 font-heading text-lg italic text-heading/80">
-                  &ldquo;AI is everywhere. The human factor is rare.&rdquo;
-                </p>
-                <p className="mt-2 text-xs text-muted">
-                  Je bent meer dan een CV. Bekijk nu wat jou uniek maakt.
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── Stage 8: Final fade text ── */}
-          <AnimatePresence>
-            {splashStage >= 8 && (
-              <motion.p
-                key="loading"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 0.6 }}
-                transition={{ duration: 0.4 }}
-                className="mt-8 text-xs text-muted"
-              >
-                Je profiel wordt geladen...
-              </motion.p>
-            )}
-          </AnimatePresence>
-        </div>
+        {/* Scene 6: Loading */}
+        {scene === 6 && (
+          <motion.div key="s6" className="relative z-10 flex flex-col items-center gap-3" initial={{ opacity: 0 }} animate={{ opacity: 0.6 }} transition={{ duration: 0.5 }}>
+            <div className="h-1.5 w-1.5 rounded-full bg-smaragd animate-pulse" />
+            <p className="text-xs text-muted">Je profiel wordt geladen</p>
+          </motion.div>
+        )}
       </motion.div>
     );
   }

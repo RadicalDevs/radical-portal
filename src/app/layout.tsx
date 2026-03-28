@@ -45,7 +45,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col font-body">
+      <body className="min-h-full flex flex-col font-body overflow-x-hidden">
         <ThemeProvider>
           <Navigation />
           {children}

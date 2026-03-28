@@ -178,9 +178,9 @@ function CustomAxisTick({
   center: number;
 }) {
   const percentage = Math.round(score * 10);
-  const isSmall = center < 160;
+  const isSmall = center < 175;
 
-  const offset = center * 0.055;
+  const offset = center * 0.11;
   const angle = Math.atan2(y - center, x - center);
   const labelX = x + Math.cos(angle) * offset;
   const labelY = y + Math.sin(angle) * offset;
