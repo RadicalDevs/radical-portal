@@ -1,0 +1,820 @@
+"use server";
+
+import { z } from "zod";
+import { revalidatePath } from "next/cache";
+import { createServiceClient } from "@/lib/supabase/server";
+import type { ApacDimension, ApacFormConfig } from "@/lib/apac/types";
+
+// ---------------------------------------------------------------------------
+// Shared types
+// ---------------------------------------------------------------------------
+
+export interface AdminKpiData {
+  totalKandidaten: number;
+  apacThisWeek: number;
+  apacThisMonth: number;
+  apacTotal: number;
+  poortFase: "learning" | "active";
+  poortTeller: number;
+  poortDrempel: number;
+  recenteActiviteit: RecentActivity[];
+}
+
+export interface RecentActivity {
+  id: string;
+  type: string;
+  beschrijving: string;
+  kandidaatNaam: string | null;
+  createdAt: string;
+}
+
+export interface AdminKandidaat {
+  id: string;
+  voornaam: string;
+  achternaam: string;
+  email: string | null;
+  poolStatus: string;
+  apacSource: string;
+  createdAt: string;
+  apacDate: string | null;
+  adaptability: number | null;
+  personality: number | null;
+  awareness: number | null;
+  connection: number | null;
+  gecombineerd: number | null;
+}
+
+export interface PoortPageData {
+  config: {
+    fase: "learning" | "active";
+    kandidaat_drempel: number;
+    drempel_adaptability: number | null;
+    drempel_personality: number | null;
+    drempel_awareness: number | null;
+    drempel_connection: number | null;
+    drempel_gecombineerd: number | null;
+  } | null;
+  teller: number;
+  stats: DimensionStats;
+  histogramData: HistogramBin[];
+}
+
+export interface DimensionStats {
+  adaptability: { avg: number; p50: number; p75: number; p90: number };
+  personality: { avg: number; p50: number; p75: number; p90: number };
+  awareness: { avg: number; p50: number; p75: number; p90: number };
+  connection: { avg: number; p50: number; p75: number; p90: number };
+  gecombineerd: { avg: number; p50: number; p75: number; p90: number };
+}
+
+export interface HistogramBin {
+  bucket: string;
+  adaptability: number;
+  personality: number;
+  awareness: number;
+  connection: number;
+}
+
+export interface AdminApacQuestion {
+  id: string;
+  question_text: string;
+  options: { label: string; value: number }[];
+  variable: string;
+  weight: number;
+  sort_order: number;
+  is_active: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// 1. Admin home KPIs
+// ---------------------------------------------------------------------------
+
+export async function getAdminKpis(): Promise<AdminKpiData> {
+  const db = createServiceClient();
+
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [
+    { count: totalKandidaten },
+    { count: apacThisWeek },
+    { count: apacThisMonth },
+    { count: apacTotal },
+    { data: poortConfig },
+    { count: poortTeller },
+    { data: activiteiten },
+  ] = await Promise.all([
+    db.from("kandidaten").select("*", { count: "exact", head: true }),
+    db
+      .from("apac_resultaten")
+      .select("*", { count: "exact", head: true })
+      .eq("is_seed", false)
+      .gte("created_at", weekAgo),
+    db
+      .from("apac_resultaten")
+      .select("*", { count: "exact", head: true })
+      .eq("is_seed", false)
+      .gte("created_at", monthAgo),
+    db
+      .from("apac_resultaten")
+      .select("*", { count: "exact", head: true })
+      .eq("is_seed", false),
+    db
+      .from("poort_config")
+      .select("fase, kandidaat_drempel")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+    db
+      .from("apac_resultaten")
+      .select("*", { count: "exact", head: true })
+      .eq("is_seed", false),
+    db
+      .from("activiteiten")
+      .select("id, type, beschrijving, kandidaat_id, created_at")
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
+
+  // Enrich activity with kandidaat names
+  const recenteActiviteit: RecentActivity[] = [];
+  if (activiteiten) {
+    const kandidaatIds = [
+      ...new Set(activiteiten.map((a) => a.kandidaat_id).filter(Boolean)),
+    ];
+    const { data: kandidaten } = kandidaatIds.length
+      ? await db
+          .from("kandidaten")
+          .select("id, voornaam, achternaam")
+          .in("id", kandidaatIds)
+      : { data: [] };
+
+    const nameMap = Object.fromEntries(
+      (kandidaten ?? []).map((k) => [k.id, `${k.voornaam} ${k.achternaam}`.trim()])
+    );
+
+    for (const a of activiteiten) {
+      recenteActiviteit.push({
+        id: a.id,
+        type: a.type,
+        beschrijving: a.beschrijving,
+        kandidaatNaam: a.kandidaat_id ? (nameMap[a.kandidaat_id] ?? null) : null,
+        createdAt: a.created_at,
+      });
+    }
+  }
+
+  return {
+    totalKandidaten: totalKandidaten ?? 0,
+    apacThisWeek: apacThisWeek ?? 0,
+    apacThisMonth: apacThisMonth ?? 0,
+    apacTotal: apacTotal ?? 0,
+    poortFase: poortConfig?.fase ?? "learning",
+    poortTeller: poortTeller ?? 0,
+    poortDrempel: poortConfig?.kandidaat_drempel ?? 150,
+    recenteActiviteit,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2. Kandidaten list
+// ---------------------------------------------------------------------------
+
+export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
+  const db = createServiceClient();
+
+  const [{ data: kandidaten, error }, { data: apacRows }] = await Promise.all([
+    db
+      .from("kandidaten")
+      .select("id, voornaam, achternaam, email, pool_status, apac_source, created_at")
+      .order("created_at", { ascending: false }),
+    db
+      .from("apac_resultaten")
+      .select("kandidaat_id, adaptability, personality, awareness, connection, created_at")
+      .eq("is_seed", false)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (error) {
+    console.error("[getAdminKandidaten]", error);
+    return [];
+  }
+
+  // Map the most recent APAC result per kandidaat
+  type ApacRow = NonNullable<typeof apacRows>[number];
+  const apacMap = new Map<string, ApacRow>();
+  for (const r of apacRows ?? []) {
+    if (!apacMap.has(r.kandidaat_id)) {
+      apacMap.set(r.kandidaat_id, r);
+    }
+  }
+
+  return (kandidaten ?? []).map((k) => {
+    const apac = apacMap.get(k.id) ?? null;
+    const a = apac !== null ? Number(apac.adaptability) : null;
+    const p = apac !== null ? Number(apac.personality) : null;
+    const aw = apac !== null ? Number(apac.awareness) : null;
+    const c = apac !== null ? Number(apac.connection) : null;
+    const gecombineerd =
+      a !== null && p !== null && aw !== null && c !== null
+        ? Math.round(((a + p + aw + c) / 4) * 10) / 10
+        : null;
+
+    return {
+      id: k.id,
+      voornaam: k.voornaam,
+      achternaam: k.achternaam,
+      email: k.email,
+      poolStatus: k.pool_status,
+      apacSource: k.apac_source,
+      createdAt: k.created_at,
+      apacDate: apac?.created_at ?? null,
+      adaptability: a,
+      personality: p,
+      awareness: aw,
+      connection: c,
+      gecombineerd,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 3. Import: single kandidaat
+// ---------------------------------------------------------------------------
+
+const ImportKandidaatSchema = z.object({
+  voornaam: z.string().min(1, "Voornaam is verplicht").max(100),
+  achternaam: z.string().max(100).default(""),
+  email: z.string().email("Ongeldig e-mailadres"),
+  adaptability: z.coerce.number().min(0).max(10),
+  personality: z.coerce.number().min(0).max(10),
+  awareness: z.coerce.number().min(0).max(10),
+  connection: z.coerce.number().min(0).max(10),
+  datum: z.string().optional(),
+});
+
+export type ImportResult =
+  | { success: true; message: string }
+  | { success: false; error: string };
+
+export async function importKandidaat(
+  formData: FormData
+): Promise<ImportResult> {
+  const parsed = ImportKandidaatSchema.safeParse({
+    voornaam: formData.get("voornaam"),
+    achternaam: formData.get("achternaam") || "",
+    email: formData.get("email"),
+    adaptability: formData.get("adaptability"),
+    personality: formData.get("personality"),
+    awareness: formData.get("awareness"),
+    connection: formData.get("connection"),
+    datum: formData.get("datum") || undefined,
+  });
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const db = createServiceClient();
+  const { voornaam, achternaam, email, adaptability, personality, awareness, connection, datum } =
+    parsed.data;
+
+  // Check for duplicate
+  const { data: existing } = await db
+    .from("kandidaten")
+    .select("id")
+    .eq("email", email)
+    .single();
+
+  if (existing) {
+    return { success: false, error: `Kandidaat met e-mail ${email} bestaat al.` };
+  }
+
+  const gecombineerd = (adaptability + personality + awareness + connection) / 4;
+  const poolStatus =
+    gecombineerd >= 7.5 ? "radical" : gecombineerd >= 6 ? "in_selectie" : "prospect";
+
+  const { data: kandidaat, error: kErr } = await db
+    .from("kandidaten")
+    .insert({
+      voornaam,
+      achternaam,
+      email,
+      pool_status: poolStatus,
+      apac_source: "manual",
+    })
+    .select("id")
+    .single();
+
+  if (kErr || !kandidaat) {
+    console.error("[importKandidaat]", kErr);
+    return { success: false, error: "Kon kandidaat niet opslaan." };
+  }
+
+  const submittedAt = datum ? new Date(datum).toISOString() : new Date().toISOString();
+
+  const { error: aErr } = await db.from("apac_resultaten").insert({
+    kandidaat_id: kandidaat.id,
+    adaptability,
+    personality,
+    awareness,
+    connection,
+    bron: "manual",
+    is_seed: false,
+    created_at: submittedAt,
+    updated_at: submittedAt,
+  });
+
+  if (aErr) {
+    console.error("[importKandidaat] apac_resultaten error:", aErr);
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/candidates");
+  return { success: true, message: `${voornaam} ${achternaam} succesvol geïmporteerd.` };
+}
+
+// ---------------------------------------------------------------------------
+// 4. Import: bulk CSV
+// ---------------------------------------------------------------------------
+
+export interface BulkImportRow {
+  voornaam: string;
+  achternaam: string;
+  email: string;
+  adaptability: number;
+  personality: number;
+  awareness: number;
+  connection: number;
+  datum?: string;
+}
+
+export interface BulkImportResult {
+  success: number;
+  errors: { row: number; email: string; message: string }[];
+}
+
+const BulkRowSchema = ImportKandidaatSchema;
+
+export async function importKandidatenBulk(
+  rows: BulkImportRow[]
+): Promise<BulkImportResult> {
+  const db = createServiceClient();
+  const results: BulkImportResult = { success: 0, errors: [] };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const parsed = BulkRowSchema.safeParse(row);
+
+    if (!parsed.success) {
+      results.errors.push({
+        row: i + 1,
+        email: row.email ?? "",
+        message: parsed.error.issues[0].message,
+      });
+      continue;
+    }
+
+    const { voornaam, achternaam, email, adaptability, personality, awareness, connection, datum } =
+      parsed.data;
+
+    const { data: existing } = await db
+      .from("kandidaten")
+      .select("id")
+      .eq("email", email)
+      .single();
+
+    if (existing) {
+      results.errors.push({ row: i + 1, email, message: "Bestaat al" });
+      continue;
+    }
+
+    const gecombineerd = (adaptability + personality + awareness + connection) / 4;
+    const poolStatus =
+      gecombineerd >= 7.5 ? "radical" : gecombineerd >= 6 ? "in_selectie" : "prospect";
+
+    const { data: kandidaat, error: kErr } = await db
+      .from("kandidaten")
+      .insert({ voornaam, achternaam, email, pool_status: poolStatus, apac_source: "manual" })
+      .select("id")
+      .single();
+
+    if (kErr || !kandidaat) {
+      results.errors.push({ row: i + 1, email, message: "DB fout bij opslaan" });
+      continue;
+    }
+
+    const submittedAt = datum ? new Date(datum).toISOString() : new Date().toISOString();
+    await db.from("apac_resultaten").insert({
+      kandidaat_id: kandidaat.id,
+      adaptability,
+      personality,
+      awareness,
+      connection,
+      bron: "manual",
+      is_seed: false,
+      created_at: submittedAt,
+      updated_at: submittedAt,
+    });
+
+    results.success++;
+  }
+
+  if (results.success > 0) {
+    revalidatePath("/admin");
+    revalidatePath("/admin/candidates");
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// 5. De Poort page data
+// ---------------------------------------------------------------------------
+
+export async function getPoortPageData(): Promise<PoortPageData> {
+  const db = createServiceClient();
+
+  const [{ data: config }, { count: teller }, { data: scores }] = await Promise.all([
+    db
+      .from("poort_config")
+      .select(
+        "fase, kandidaat_drempel, drempel_adaptability, drempel_personality, drempel_awareness, drempel_connection, drempel_gecombineerd"
+      )
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single(),
+    db
+      .from("apac_resultaten")
+      .select("*", { count: "exact", head: true })
+      .eq("is_seed", false),
+    db
+      .from("apac_resultaten")
+      .select("adaptability, personality, awareness, connection")
+      .eq("is_seed", false),
+  ]);
+
+  const rows = (scores ?? []).map((r) => ({
+    adaptability: Number(r.adaptability),
+    personality: Number(r.personality),
+    awareness: Number(r.awareness),
+    connection: Number(r.connection),
+    gecombineerd:
+      (Number(r.adaptability) + Number(r.personality) + Number(r.awareness) + Number(r.connection)) / 4,
+  }));
+
+  const computeStats = (values: number[]) => {
+    if (values.length === 0) return { avg: 0, p50: 0, p75: 0, p90: 0 };
+    const sorted = [...values].sort((a, b) => a - b);
+    const avg = Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
+    const pct = (p: number) => {
+      const idx = Math.floor(p * (sorted.length - 1));
+      return Math.round(sorted[idx] * 10) / 10;
+    };
+    return { avg, p50: pct(0.5), p75: pct(0.75), p90: pct(0.9) };
+  };
+
+  const stats: DimensionStats = {
+    adaptability: computeStats(rows.map((r) => r.adaptability)),
+    personality: computeStats(rows.map((r) => r.personality)),
+    awareness: computeStats(rows.map((r) => r.awareness)),
+    connection: computeStats(rows.map((r) => r.connection)),
+    gecombineerd: computeStats(rows.map((r) => r.gecombineerd)),
+  };
+
+  // Build histogram: buckets 0-1, 1-2, ..., 9-10
+  const buckets = Array.from({ length: 10 }, (_, i) => i);
+  const histogramData: HistogramBin[] = buckets.map((b) => {
+    const inBucket = (vals: number[]) =>
+      vals.filter((v) => v >= b && v < b + 1).length;
+    return {
+      bucket: `${b}-${b + 1}`,
+      adaptability: inBucket(rows.map((r) => r.adaptability)),
+      personality: inBucket(rows.map((r) => r.personality)),
+      awareness: inBucket(rows.map((r) => r.awareness)),
+      connection: inBucket(rows.map((r) => r.connection)),
+    };
+  });
+
+  return {
+    config: config ?? null,
+    teller: teller ?? 0,
+    stats,
+    histogramData,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 6. Update De Poort config
+// ---------------------------------------------------------------------------
+
+const PoortConfigSchema = z.object({
+  drempel_adaptability: z.coerce.number().min(0).max(10).nullable(),
+  drempel_personality: z.coerce.number().min(0).max(10).nullable(),
+  drempel_awareness: z.coerce.number().min(0).max(10).nullable(),
+  drempel_connection: z.coerce.number().min(0).max(10).nullable(),
+  drempel_gecombineerd: z.coerce.number().min(0).max(10).nullable(),
+});
+
+export type UpdatePoortResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export async function updatePoortConfig(
+  formData: FormData
+): Promise<UpdatePoortResult> {
+  const toNullable = (val: FormDataEntryValue | null) => {
+    if (!val || val === "") return null;
+    const n = Number(val);
+    return isNaN(n) ? null : n;
+  };
+
+  const parsed = PoortConfigSchema.safeParse({
+    drempel_adaptability: toNullable(formData.get("drempel_adaptability")),
+    drempel_personality: toNullable(formData.get("drempel_personality")),
+    drempel_awareness: toNullable(formData.get("drempel_awareness")),
+    drempel_connection: toNullable(formData.get("drempel_connection")),
+    drempel_gecombineerd: toNullable(formData.get("drempel_gecombineerd")),
+  });
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const db = createServiceClient();
+  const { data: existing } = await db
+    .from("poort_config")
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (existing) {
+    await db.from("poort_config").update(parsed.data).eq("id", existing.id);
+  } else {
+    await db.from("poort_config").insert({ ...parsed.data, fase: "learning", kandidaat_drempel: 150 });
+  }
+
+  revalidatePath("/admin/poort");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// 7. APAC questions
+// ---------------------------------------------------------------------------
+
+export async function getAdminApacQuestions(): Promise<AdminApacQuestion[]> {
+  const db = createServiceClient();
+  const { data, error } = await db
+    .from("apac_questions")
+    .select("id, question_text, options, variable, weight, sort_order, is_active")
+    .order("sort_order", { ascending: true });
+
+  if (error) {
+    console.error("[getAdminApacQuestions]", error);
+    return [];
+  }
+  return (data ?? []) as AdminApacQuestion[];
+}
+
+const QuestionSchema = z.object({
+  question_text: z.string().min(1, "Vraag mag niet leeg zijn").max(500),
+  variable: z.string().min(1),
+  weight: z.coerce.number().min(0.1).max(5).default(1),
+  is_active: z.boolean().default(true),
+  options: z.string().transform((val, ctx) => {
+    try {
+      return JSON.parse(val) as { label: string; value: number }[];
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Ongeldige opties JSON" });
+      return z.NEVER;
+    }
+  }),
+});
+
+export type QuestionMutationResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export async function updateApacQuestion(
+  id: string,
+  formData: FormData
+): Promise<QuestionMutationResult> {
+  const parsed = QuestionSchema.safeParse({
+    question_text: formData.get("question_text"),
+    variable: formData.get("variable"),
+    weight: formData.get("weight"),
+    is_active: formData.get("is_active") === "true",
+    options: formData.get("options"),
+  });
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const db = createServiceClient();
+  const { error } = await db
+    .from("apac_questions")
+    .update(parsed.data)
+    .eq("id", id);
+
+  if (error) {
+    console.error("[updateApacQuestion]", error);
+    return { success: false, error: "Kon vraag niet opslaan." };
+  }
+
+  revalidatePath("/admin/apac-form");
+  return { success: true };
+}
+
+export async function addApacQuestion(
+  formData: FormData
+): Promise<QuestionMutationResult> {
+  const parsed = QuestionSchema.safeParse({
+    question_text: formData.get("question_text"),
+    variable: formData.get("variable"),
+    weight: formData.get("weight"),
+    is_active: true,
+    options: formData.get("options"),
+  });
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const db = createServiceClient();
+
+  // Get max sort_order
+  const { data: maxRow } = await db
+    .from("apac_questions")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .single();
+
+  const sortOrder = (maxRow?.sort_order ?? 0) + 1;
+
+  const { error } = await db.from("apac_questions").insert({
+    ...parsed.data,
+    sort_order: sortOrder,
+  });
+
+  if (error) {
+    console.error("[addApacQuestion]", error);
+    return { success: false, error: "Kon vraag niet toevoegen." };
+  }
+
+  revalidatePath("/admin/apac-form");
+  return { success: true };
+}
+
+export async function deleteApacQuestion(
+  id: string
+): Promise<QuestionMutationResult> {
+  const db = createServiceClient();
+  const { error } = await db.from("apac_questions").delete().eq("id", id);
+
+  if (error) {
+    console.error("[deleteApacQuestion]", error);
+    return { success: false, error: "Kon vraag niet verwijderen." };
+  }
+
+  revalidatePath("/admin/apac-form");
+  return { success: true };
+}
+
+export async function reorderApacQuestions(
+  items: { id: string; sort_order: number }[]
+): Promise<QuestionMutationResult> {
+  const db = createServiceClient();
+
+  await Promise.all(
+    items.map(({ id, sort_order }) =>
+      db.from("apac_questions").update({ sort_order }).eq("id", id)
+    )
+  );
+
+  revalidatePath("/admin/apac-form");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// 8. Toggle poort fase
+// ---------------------------------------------------------------------------
+
+export async function togglePoortFase(): Promise<UpdatePoortResult> {
+  const db = createServiceClient();
+
+  const { data: existing } = await db
+    .from("poort_config")
+    .select("id, fase")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!existing) {
+    return { success: false, error: "Geen poort configuratie gevonden." };
+  }
+
+  const newFase = existing.fase === "learning" ? "active" : "learning";
+  await db.from("poort_config").update({ fase: newFase }).eq("id", existing.id);
+
+  revalidatePath("/admin/poort");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// 9. Form config (intro, thank you, notifications, settings)
+// ---------------------------------------------------------------------------
+
+export async function getFormConfig(): Promise<ApacFormConfig | null> {
+  const db = createServiceClient();
+  const { data, error } = await db
+    .from("apac_form_config")
+    .select("*")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .single();
+
+  if (error || !data) return null;
+  return data as ApacFormConfig;
+}
+
+const FormConfigSchema = z.object({
+  intro_title: z.string().min(1).max(200),
+  intro_subtitle: z.string().max(300).default(""),
+  intro_tagline: z.string().max(300).default(""),
+  intro_body: z.string().max(2000).default(""),
+  rules_title: z.string().max(200).default(""),
+  rules_items: z.string().transform((val, ctx) => {
+    try {
+      const parsed = JSON.parse(val);
+      if (!Array.isArray(parsed)) throw new Error();
+      return parsed as { label: string; text: string; color: string }[];
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Ongeldige regels JSON" });
+      return z.NEVER;
+    }
+  }),
+  rules_footer: z.string().max(500).default(""),
+  thankyou_title: z.string().max(200).default(""),
+  thankyou_body: z.string().max(1000).default(""),
+  require_lastname: z.boolean().default(false),
+  notification_emails: z.string().transform((val) =>
+    val
+      .split(/[\n,;]+/)
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0 && e.includes("@"))
+  ),
+});
+
+export type FormConfigResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export async function updateFormConfig(
+  formData: FormData
+): Promise<FormConfigResult> {
+  const parsed = FormConfigSchema.safeParse({
+    intro_title: formData.get("intro_title"),
+    intro_subtitle: formData.get("intro_subtitle"),
+    intro_tagline: formData.get("intro_tagline"),
+    intro_body: formData.get("intro_body"),
+    rules_title: formData.get("rules_title"),
+    rules_items: formData.get("rules_items"),
+    rules_footer: formData.get("rules_footer"),
+    thankyou_title: formData.get("thankyou_title"),
+    thankyou_body: formData.get("thankyou_body"),
+    require_lastname: formData.get("require_lastname") === "true",
+    notification_emails: formData.get("notification_emails") ?? "",
+  });
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const db = createServiceClient();
+  const { data: existing } = await db
+    .from("apac_form_config")
+    .select("id")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .single();
+
+  const payload = {
+    ...parsed.data,
+    notification_emails: parsed.data.notification_emails,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    await db.from("apac_form_config").update(payload).eq("id", existing.id);
+  } else {
+    await db.from("apac_form_config").insert(payload);
+  }
+
+  revalidatePath("/admin/apac-form");
+  revalidatePath("/apac/test");
+  return { success: true };
+}

@@ -1,26 +1,226 @@
 @import "tailwindcss";
 
+/* ============================================================
+ * Radical Portal — Dual-mode theme (docs/BRANDING.md)
+ * ============================================================ */
+
+/* --- Layer 1: Light mode (default) --- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-page: #F4F6F9;
+  --bg-surface: #FFFFFF;
+  --bg-surface-light: #F0F2F5;
+  --bg-surface-border: #E2E5EB;
+
+  --text-heading: #0D1117;
+  --text-body: #4B5563;
+  --text-muted: #6B7280;
+  --text-label: #374151;
+  --text-placeholder: #9CA3AF;
+
+  --chart-grid: #E5E7EB;
+
+  --glow-smaragd: 0 0 32px rgba(46, 213, 115, 0.15);
+  --glow-smaragd-strong: 0 0 48px rgba(46, 213, 115, 0.25);
+  --glow-coral: 0 0 32px rgba(230, 115, 79, 0.15);
+
+  color-scheme: light;
 }
 
+/* --- Layer 1: Dark mode --- */
+.dark {
+  --bg-page: #0D0D14;
+  --bg-surface: #13131F;
+  --bg-surface-light: #1A1A2E;
+  --bg-surface-border: #252538;
+
+  --text-heading: #F0F2F8;
+  --text-body: #B8BDD4;
+  --text-muted: #5D6280;
+  --text-label: #C8CCE0;
+  --text-placeholder: #5D6280;
+
+  --chart-grid: #252538;
+
+  --glow-smaragd: 0 0 40px rgba(46, 213, 115, 0.18);
+  --glow-smaragd-strong: 0 0 64px rgba(46, 213, 115, 0.30);
+  --glow-coral: 0 0 40px rgba(230, 115, 79, 0.18);
+
+  color-scheme: dark;
+}
+
+/* --- Layer 2: Tailwind @theme inline --- */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--bg-surface);
+  --color-surface-light: var(--bg-surface-light);
+  --color-surface-border: var(--bg-surface-border);
+  --color-page: var(--bg-page);
+
+  --color-heading: var(--text-heading);
+  --color-body: var(--text-body);
+  --color-muted: var(--text-muted);
+  --color-label: var(--text-label);
+
+  --color-smaragd: #2ed573;
+  --color-smaragd-dark: #22b85a;
+  --color-smaragd-light: #5ee89a;
+
+  --color-coral: #E6734F;
+  --color-coral-dark: #d45a35;
+  --color-coral-light: #f09e85;
+
+  --font-heading: "Afacad Flux", sans-serif;
+  --font-body: "Inter", sans-serif;
+
+  --radius-sm: 4px;
+  --radius-default: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* --- Layer 3: Base element styles --- */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-body);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+input, textarea, select {
+  color-scheme: inherit;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-surface-border); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* --- Utility classes --- */
+
+/* Glass card */
+.glass {
+  background: color-mix(in srgb, var(--bg-surface) 75%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--bg-surface-border);
+}
+
+.dark .glass {
+  background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+  border-color: rgba(255,255,255,0.06);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #2ed573 0%, #5ee89a 50%, #2ed573 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-warm {
+  background: linear-gradient(135deg, #2ed573 0%, #E6734F 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-smaragd {
+  box-shadow: var(--glow-smaragd);
+}
+.glow-smaragd-strong {
+  box-shadow: var(--glow-smaragd-strong);
+}
+.glow-coral {
+  box-shadow: var(--glow-coral);
+}
+
+/* Gradient border card */
+.card-gradient-border {
+  position: relative;
+  background: var(--bg-surface);
+  border-radius: 12px;
+}
+
+.card-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgba(46,213,115,0.2), rgba(230,115,79,0.1), rgba(46,213,115,0.0));
+  z-index: -1;
+}
+
+/* Animated gradient background */
+.bg-radial-smaragd {
+  background:
+    radial-gradient(ellipse 60% 40% at 80% 10%, rgba(46,213,115,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 10% 80%, rgba(230,115,79,0.06) 0%, transparent 60%),
+    var(--bg-page);
+}
+
+/* Grid pattern overlay */
+.bg-grid-pattern {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Dot pattern overlay */
+.bg-dot-pattern {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Floating animation for background blobs */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-20px) rotate(2deg); }
+  66% { transform: translateY(10px) rotate(-1deg); }
+}
+
+.animate-float {
+  animation: float 8s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float 12s ease-in-out infinite;
+}
+
+.animate-float-delay {
+  animation: float 10s ease-in-out 3s infinite;
+}
+
+/* Shimmer glow for CTA buttons */
+@keyframes shimmer {
+  0% { box-shadow: 0 0 20px rgba(46, 213, 115, 0.15); }
+  50% { box-shadow: 0 0 36px rgba(46, 213, 115, 0.30); }
+  100% { box-shadow: 0 0 20px rgba(46, 213, 115, 0.15); }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Counter number optimization */
+.counter-animate {
+  will-change: transform;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reduced motion: disable all custom animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-float-slow,
+  .animate-float-delay,
+  .animate-shimmer {
+    animation: none !important;
+  }
 }
