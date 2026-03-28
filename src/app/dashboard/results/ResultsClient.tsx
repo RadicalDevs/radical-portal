@@ -164,16 +164,17 @@ export default function ResultsClient({
       setSplashDone(true);
       return;
     }
+    // NEW ORDER: build tension → dimensions → quote → cliffhanger → BIG SCORE (finale)
     const stages: [number, number][] = [
-      [800, 1],      // Glow + line starts
-      [2800, 2],     // "We hebben je geanalyseerd"
-      [5000, 3],     // Dimensions appear one by one
-      [7500, 4],     // Everything clears, "Jouw score" text
-      [9000, 5],     // Big number counts up
-      [12500, 6],    // Dimension breakdown bars
-      [16000, 7],    // Quote / message
-      [18500, 8],    // Fade out begins
-      [20000, 9],    // Done
+      [800, 1],      // Glow builds
+      [2800, 2],     // "We hebben je geanalyseerd" + dimension names
+      [5000, 3],     // Dimension dots animate in
+      [7500, 4],     // Individual dimension bars (scores per dimensie)
+      [11500, 5],    // Quote (reflectiemoment, ademruimte)
+      [15000, 6],    // Cliffhanger: "En nu..." (spanning!)
+      [17500, 7],    // BIG NUMBER + CONFETTI (grand finale!)
+      [21500, 8],    // Fade out begins
+      [23000, 9],    // Done
     ];
     const timers = stages.map(([ms, stage]) =>
       setTimeout(() => {
@@ -187,77 +188,93 @@ export default function ResultsClient({
     return () => timers.forEach(clearTimeout);
   }, [alwaysSplash]);
 
-  // Fire confetti cannon when big score appears
+  // Fire confetti cannon when big score appears (stage 7 = grand finale)
   const confettiFired = useRef(false);
   useEffect(() => {
-    if (splashStage === 5 && !confettiFired.current) {
+    if (splashStage === 7 && !confettiFired.current) {
       confettiFired.current = true;
 
-      // First burst — left cannon
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { x: 0.15, y: 0.6 },
-        colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
-        angle: 60,
-        gravity: 0.8,
-        ticks: 200,
-        scalar: 1.1,
-      });
+      // Delay slightly so the number has started appearing
+      setTimeout(() => {
+        // Left cannon
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { x: 0.1, y: 0.6 },
+          colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
+          angle: 60,
+          gravity: 0.7,
+          ticks: 250,
+          scalar: 1.2,
+        });
+        // Right cannon
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { x: 0.9, y: 0.6 },
+          colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
+          angle: 120,
+          gravity: 0.7,
+          ticks: 250,
+          scalar: 1.2,
+        });
+      }, 500);
 
-      // Second burst — right cannon
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { x: 0.85, y: 0.6 },
-        colors: ["#2ed573", "#E6734F", "#8B5CF6", "#3B82F6", "#ffffff"],
-        angle: 120,
-        gravity: 0.8,
-        ticks: 200,
-        scalar: 1.1,
-      });
-
-      // Third burst — center rain (delayed)
+      // Center rain
       setTimeout(() => {
         confetti({
-          particleCount: 50,
-          spread: 120,
-          origin: { x: 0.5, y: 0.3 },
+          particleCount: 60,
+          spread: 140,
+          origin: { x: 0.5, y: 0.2 },
           colors: ["#2ed573", "#5ee89a", "#E6734F", "#8B5CF6"],
-          gravity: 0.6,
-          ticks: 250,
-          scalar: 0.9,
-          startVelocity: 25,
+          gravity: 0.5,
+          ticks: 300,
+          scalar: 1.0,
+          startVelocity: 30,
         });
-      }, 400);
+      }, 1000);
 
-      // Fourth burst — small sparkle burst (delayed more)
+      // Sparkle burst
+      setTimeout(() => {
+        confetti({
+          particleCount: 40,
+          spread: 360,
+          origin: { x: 0.5, y: 0.45 },
+          colors: ["#2ed573", "#ffffff", "#5ee89a"],
+          gravity: 0.3,
+          ticks: 200,
+          scalar: 0.8,
+          startVelocity: 18,
+        });
+      }, 1500);
+
+      // Final subtle rain
       setTimeout(() => {
         confetti({
           particleCount: 30,
-          spread: 360,
-          origin: { x: 0.5, y: 0.5 },
-          colors: ["#2ed573", "#ffffff"],
+          spread: 100,
+          origin: { x: 0.5, y: 0.1 },
+          colors: ["#2ed573", "#E6734F"],
           gravity: 0.4,
-          ticks: 150,
-          scalar: 0.7,
-          startVelocity: 15,
+          ticks: 200,
+          scalar: 0.6,
+          startVelocity: 10,
         });
-      }, 900);
+      }, 2200);
     }
   }, [splashStage]);
 
   if (!scores) return null;
 
-  // ---- CINEMATIC SPLASH (20s) ----
-  // Each scene is fully isolated — only ONE scene renders at a time. No overlap.
+  // ---- CINEMATIC SPLASH ----
+  // NEW flow: intro → dimensions → dimension scores → quote → cliffhanger → BIG SCORE
   const scene =
     splashStage < 2 ? 0 :   // empty, glows building
-    splashStage < 4 ? 1 :   // intro text + dimensions
-    splashStage < 5 ? 2 :   // "dit is jouw score" title
-    splashStage < 6 ? 3 :   // big number counting
-    splashStage < 7 ? 4 :   // dimension breakdown bars
-    splashStage < 8 ? 5 :   // quote
+    splashStage < 4 ? 1 :   // intro text + dimension names
+    splashStage < 5 ? 2 :   // dimension breakdown bars
+    splashStage < 6 ? 3 :   // quote (breathing room)
+    splashStage < 7 ? 4 :   // cliffhanger: "En nu..."
+    splashStage < 8 ? 5 :   // BIG NUMBER + CONFETTI
     6;                       // fade out
 
   if (!splashDone) {
@@ -304,9 +321,7 @@ export default function ResultsClient({
           style={{ y: -150 }}
         />
 
-        {/* Only the active scene renders — no overlap */}
-
-        {/* Scene 1: Intro + dimensions */}
+        {/* ═══ Scene 1: Intro + dimension names ═══ */}
         {scene === 1 && (
           <motion.div key="s1" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0 }}>
             <p className="text-xs font-medium tracking-[0.25em] uppercase text-muted/60">APAC Assessment voltooid</p>
@@ -324,27 +339,9 @@ export default function ResultsClient({
           </motion.div>
         )}
 
-        {/* Scene 2: Score title */}
+        {/* ═══ Scene 2: Dimension bars (individual scores — NO combined score yet) ═══ */}
         {scene === 2 && (
-          <motion.div key="s2" className="relative z-10 px-6 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.0 }}>
-            <motion.p initial={{ letterSpacing: "0.6em", opacity: 0 }} animate={{ letterSpacing: "0.2em", opacity: 1 }} transition={{ duration: 1.5, ease: "easeOut" }} className="text-sm font-semibold uppercase text-smaragd">{firstName}, dit is jouw score</motion.p>
-          </motion.div>
-        )}
-
-        {/* Scene 3: Big number reveal */}
-        {scene === 3 && (
-          <motion.div key="s3" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-smaragd">{firstName}, dit is jouw score</p>
-            <motion.div className="mt-8" initial={{ scale: 0.1, opacity: 0, filter: "blur(30px)" }} animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }} transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}>
-              <SplashCounter target={pct} />
-            </motion.div>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2.0, duration: 1.0 }} className="mt-4 text-sm text-muted">gecombineerde APAC-score</motion.p>
-          </motion.div>
-        )}
-
-        {/* Scene 4: Dimension bars */}
-        {scene === 4 && (
-          <motion.div key="s4" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0 }}>
+          <motion.div key="s2" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0 }}>
             <p className="mb-8 text-sm font-semibold uppercase tracking-[0.2em] text-smaragd">Je dimensies in detail</p>
             <div className="grid w-full max-w-lg grid-cols-1 gap-y-5 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-6">
               {DIMENSIONS.map((dim, i) => {
@@ -368,16 +365,90 @@ export default function ResultsClient({
           </motion.div>
         )}
 
-        {/* Scene 5: Quote */}
-        {scene === 5 && (
-          <motion.div key="s5" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.2 }}>
+        {/* ═══ Scene 3: Quote (reflectie, ademruimte) ═══ */}
+        {scene === 3 && (
+          <motion.div key="s3" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.2 }}>
             <motion.div className="h-px bg-gradient-to-r from-transparent via-smaragd/30 to-transparent" initial={{ width: 0 }} animate={{ width: 80 }} transition={{ duration: 1.0 }} />
             <p className="mt-8 font-heading text-2xl italic text-heading/80 leading-relaxed sm:text-3xl">&ldquo;AI is everywhere.<br />The human factor is rare.&rdquo;</p>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 1.0 }} className="mt-5 text-sm text-muted">Je bent meer dan een CV. Bekijk nu wat jou uniek maakt.</motion.p>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 1.0 }} className="mt-5 text-sm text-muted">Je bent meer dan een CV.</motion.p>
           </motion.div>
         )}
 
-        {/* Scene 6: Loading */}
+        {/* ═══ Scene 4: CLIFFHANGER — "En nu..." ═══ */}
+        {scene === 4 && (
+          <motion.div key="s4" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8 }}>
+            <motion.p
+              initial={{ letterSpacing: "0.8em", opacity: 0, y: 10 }}
+              animate={{ letterSpacing: "0.25em", opacity: 1, y: 0 }}
+              transition={{ duration: 2.0, ease: "easeOut" }}
+              className="text-xs font-medium uppercase tracking-widest text-muted/50"
+            >
+              En nu...
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1.2, delay: 1.0 }}
+              className="mt-6 font-heading text-2xl font-bold text-heading sm:text-3xl"
+            >
+              {firstName}, jouw gecombineerde score
+            </motion.p>
+            {/* Pulsing dots for suspense */}
+            <motion.div
+              className="mt-8 flex items-center gap-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.8 }}
+            >
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  className="h-2 w-2 rounded-full bg-smaragd"
+                  animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.2, 0.8] }}
+                  transition={{ duration: 1.0, delay: i * 0.2, repeat: Infinity }}
+                />
+              ))}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* ═══ Scene 5: BIG NUMBER REVEAL + CONFETTI (GRAND FINALE) ═══ */}
+        {scene === 5 && (
+          <motion.div key="s5" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8 }}
+              className="text-sm font-semibold uppercase tracking-[0.2em] text-smaragd"
+            >
+              Gecombineerde APAC-score
+            </motion.p>
+            <motion.div
+              className="mt-8"
+              initial={{ scale: 0.1, opacity: 0, filter: "blur(40px)" }}
+              animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
+              transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <SplashCounter target={pct} />
+            </motion.div>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 2.5, duration: 1.0 }}
+              className="mt-6 text-muted max-w-sm"
+            >
+              {pct >= 80
+                ? "Uitzonderlijk. Je behoort tot de top van AI-professionals."
+                : pct >= 65
+                ? "Sterk profiel. Je menselijke kwaliteiten onderscheiden je."
+                : pct >= 50
+                ? "Veelbelovend. Er zit veel potentie in jouw profiel."
+                : "Een startpunt. Dit is het begin van je groei."}
+            </motion.p>
+          </motion.div>
+        )}
+
+        {/* ═══ Scene 6: Fade out / loading ═══ */}
         {scene === 6 && (
           <motion.div key="s6" className="relative z-10 flex flex-col items-center gap-3" initial={{ opacity: 0 }} animate={{ opacity: 0.6 }} transition={{ duration: 0.5 }}>
             <div className="h-1.5 w-1.5 rounded-full bg-smaragd animate-pulse" />
