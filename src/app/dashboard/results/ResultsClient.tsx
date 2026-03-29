@@ -9,6 +9,7 @@ import { calculateCombinedScore, scoreToPercentage, DIMENSION_LABELS, DIMENSION_
 import { APAC_DIMENSIONS } from "@/lib/apac/types";
 import type { ApacScores, ApacDimension } from "@/lib/apac/types";
 import type { Article } from "../actions";
+import { markScoreRevealed } from "../actions";
 
 interface Props {
   kandidaatId: string;
@@ -182,6 +183,8 @@ export default function ResultsClient({
         if (stage === 9) {
           setSplashDone(true);
           if (!alwaysSplash) sessionStorage.setItem(key, "1");
+          // Mark score as revealed in database so dashboard shows full scores
+          markScoreRevealed();
         }
       }, ms)
     );

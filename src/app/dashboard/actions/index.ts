@@ -35,6 +35,7 @@ export interface DashboardData {
     isFirstLogin: boolean;
   };
   scores: ApacScores | null;
+  scoreRevealed: boolean;
 }
 
 export interface Article {
@@ -62,7 +63,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   // Get portal_users record
   const { data: portalUser } = await supabase
     .from("portal_users")
-    .select("first_name, last_name, email, kandidaat_id")
+    .select("first_name, last_name, email, kandidaat_id, score_revealed")
     .eq("auth_user_id", user.id)
     .single();
 
@@ -132,6 +133,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       isFirstLogin,
     },
     scores,
+    scoreRevealed: portalUser.score_revealed ?? false,
   };
 }
 
@@ -265,4 +267,19 @@ export async function updateProfile(formData: FormData): Promise<UpdateProfileRe
     .eq("auth_user_id", user.id);
 
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// 4. Mark score as revealed (after splash screen)
+// ---------------------------------------------------------------------------
+
+export async function markScoreRevealed(): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  await supabase
+    .from("portal_users")
+    .update({ score_revealed: true })
+    .eq("auth_user_id", user.id);
 }

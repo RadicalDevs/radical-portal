@@ -71,7 +71,7 @@ const QUICK_LINKS = [
   },
 ];
 
-export default function DashboardClient({ data }: { data: DashboardData }) {
+export default function DashboardClient({ data, scoreRevealed }: { data: DashboardData; scoreRevealed: boolean }) {
   const liveScores = useRealtimeApac(data.user.kandidaatId, data.scores);
   const [profileOpen, setProfileOpen] = useState(data.kandidaat.isFirstLogin);
 
@@ -121,7 +121,53 @@ export default function DashboardClient({ data }: { data: DashboardData }) {
       </div>
 
       {/* APAC Results Hero */}
-      {liveScores ? (
+      {liveScores && !scoreRevealed ? (
+        /* ── SCORE NOT YET REVEALED — Mystery teaser ── */
+        <Link
+          href="/dashboard/results"
+          className="card-gradient-border group relative block overflow-hidden rounded-2xl p-1 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_0_50px_rgba(46,213,115,0.2),0_0_50px_rgba(230,115,79,0.12)]"
+        >
+          <div className="relative rounded-[13px] bg-[var(--bg-surface)] p-8 sm:p-10">
+            {/* Background glow */}
+            <div className="pointer-events-none absolute left-1/2 top-0 h-[250px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-smaragd/10 blur-[80px]" />
+            <div className="pointer-events-none absolute bottom-0 right-0 h-[200px] w-[250px] rounded-full bg-coral/8 blur-[60px]" />
+            <div className="pointer-events-none absolute left-1/4 bottom-0 h-[150px] w-[150px] rounded-full bg-[#8B5CF6]/6 blur-[50px]" />
+
+            <div className="relative flex flex-col items-center text-center">
+              {/* Badge */}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-smaragd/10 px-3 py-1 text-xs font-semibold text-smaragd">
+                <span className="h-1.5 w-1.5 rounded-full bg-smaragd animate-pulse" />
+                APAC Assessment voltooid
+              </span>
+
+              {/* Mystery score */}
+              <div className="mt-6 flex items-baseline gap-1">
+                <span className="font-heading text-7xl font-bold text-heading/10 sm:text-8xl select-none blur-lg">
+                  84%
+                </span>
+              </div>
+
+              <h3 className="mt-4 font-heading text-2xl font-bold text-heading sm:text-3xl">
+                Je score is klaar
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-muted">
+                We hebben je geanalyseerd op Adaptability, Personality, Awareness en Connection. Ontdek nu wat jou als mens bijzonder maakt.
+              </p>
+
+              {/* CTA button */}
+              <div className="mt-6">
+                <span className="inline-flex items-center gap-2 rounded-2xl bg-smaragd px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all group-hover:bg-smaragd-dark group-hover:shadow-[0_0_40px_rgba(46,213,115,0.4)] group-hover:-translate-y-0.5 animate-shimmer">
+                  Onthul je resultaten
+                  <svg className="h-5 w-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                  </svg>
+                </span>
+              </div>
+            </div>
+          </div>
+        </Link>
+      ) : liveScores ? (
+        /* ── SCORE ALREADY REVEALED — Show full scores ── */
         <Link
           href="/dashboard/results"
           className="card-gradient-border group relative block overflow-hidden rounded-2xl p-1 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_0_50px_rgba(46,213,115,0.15),0_0_50px_rgba(230,115,79,0.1)]"
