@@ -206,7 +206,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
     <div className="w-full">
       <AnimatePresence mode="wait">
         {/* ── PHASE 0: Splash screen ── */}
-        {phase === PHASE_SPLASH && (
+        {phase === PHASE_SPLASH ? (
           <motion.div
             key="splash"
             initial={{ opacity: 0 }}
@@ -268,16 +268,14 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
               />
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── PHASE 1+: Results content ── */}
-      {phase >= PHASE_REVEAL && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6 }}
-        >
+        ) : (
+          /* ── PHASE 1+: Results content (only after splash fully exits) ── */
+          <motion.div
+            key="results"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6 }}
+          >
           {/* Chapeau text — appears after splash */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -446,7 +444,8 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
             )}
           </AnimatePresence>
         </motion.div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }
