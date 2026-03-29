@@ -109,7 +109,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
 
   // Phase 1: Show radar chart
   useEffect(() => {
-    if (phase < PHASE_REVEAL) return;
+    if (phase !== PHASE_REVEAL) return;
     const timer = setTimeout(() => setShowChart(true), REVEAL_DELAY);
     const next = setTimeout(() => setPhase(PHASE_DIMS), REVEAL_DELAY + 1400);
     return () => {
@@ -120,7 +120,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
 
   // Phase 2: Show dimension cards one by one
   useEffect(() => {
-    if (phase < PHASE_DIMS) return;
+    if (phase !== PHASE_DIMS) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (let i = 0; i < APAC_DIMENSIONS.length; i++) {
       timers.push(
@@ -139,7 +139,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
   // Phase 3: Confetti + animate combined score counter
   const confettiFired = useRef(false);
   useEffect(() => {
-    if (phase < PHASE_FINAL) return;
+    if (phase !== PHASE_FINAL) return;
     const showTimer = setTimeout(() => setShowFinal(true), 200);
 
     // Fire confetti when final score appears
