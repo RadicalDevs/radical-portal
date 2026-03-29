@@ -21,30 +21,30 @@ interface Props {
   isLoggedIn: boolean;
 }
 
-/** Score-afhankelijke beschrijvingen per dimensie */
+/** Korte teaser-beschrijvingen per dimensie (publieke pagina) */
 const DIMENSION_DESCRIPTIONS: Record<
   ApacDimension,
   { high: string; mid: string; low: string }
 > = {
   adaptability: {
-    high: "Je bent uitzonderlijk flexibel en veerkrachtig. In een sector die continu verandert, ben jij degene die moeiteloos meebeweegt. Je omarmt verandering niet alleen — je bloeit erin op.",
-    mid: "Je kunt je goed aanpassen aan verandering, al kost het soms even moeite. Je hebt de basis om in een dynamische omgeving te floreren, en met bewuste aandacht kun je hier verder in groeien.",
-    low: "Verandering kan je onzeker maken, en dat is menselijk. De AI-sector vraagt veel flexibiliteit — maar het goede nieuws is dat aanpassingsvermogen een vaardigheid is die je kunt ontwikkelen.",
+    high: "Uitzonderlijk flexibel — je bloeit op in verandering.",
+    mid: "Goede basis om in een dynamische omgeving te floreren.",
+    low: "Groeiruimte — aanpassingsvermogen is te ontwikkelen.",
   },
   personality: {
-    high: "Je persoonlijkheid is een krachtig instrument. Je weet wie je bent, je staat stevig in je schoenen en je durft jezelf te laten zien. Dat is precies wat teams nodig hebben in de AI-wereld.",
-    mid: "Je hebt een herkenbare persoonlijkheid die je in veel situaties goed inzet. Er is ruimte om je nog meer te profileren en je unieke kwaliteiten bewuster in te zetten.",
-    low: "Je persoonlijkheid is er, maar komt nog niet altijd volledig tot uiting. In de AI-sector telt authenticiteit — en daar zit juist jouw groeikans.",
+    high: "Krachtige persoonlijkheid — je durft jezelf te laten zien.",
+    mid: "Herkenbaar profiel met ruimte om je meer te profileren.",
+    low: "Je authenticiteit is je groeikans in de AI-sector.",
   },
   awareness: {
-    high: "Je bewustzijn is opvallend sterk. Je bent reflectief, begrijpt de bredere context en ziet de impact van technologie op mens en maatschappij. Dat maakt je een waardevolle stem in elke AI-discussie.",
-    mid: "Je hebt een goed ontwikkeld bewustzijn van je omgeving en de bredere impact van je werk. Met meer reflectie kun je dit nog verder verdiepen.",
-    low: "Er is ruimte om je bewustzijn te verbreden — zowel zelfbewustzijn als bewustzijn van de ethische en maatschappelijke context van AI. Dit is een reis, geen eindbestemming.",
+    high: "Opvallend bewust — je ziet de bredere context scherp.",
+    mid: "Goed bewustzijn, met potentie om verder te verdiepen.",
+    low: "Ruimte om je bewustzijn te verbreden — een reis, geen eindpunt.",
   },
   connection: {
-    high: "Je vermogen om verbindingen te maken is uitzonderlijk. Je bouwt bruggen tussen mensen, ideeën en disciplines. In een wereld waar AI dreigt te isoleren, ben jij de verbinder.",
-    mid: "Je kunt goed verbinden met anderen en bouwt zinvolle relaties op. Er is potentie om dit nog strategischer in te zetten in je professionele netwerk.",
-    low: "Verbinding maken kan uitdagend zijn, zeker in een technisch veld. Maar juist de menselijke connectie wordt steeds waardevoller naarmate AI meer taken overneemt.",
+    high: "Uitzonderlijk verbindend — jij bouwt bruggen tussen mensen.",
+    mid: "Je bouwt zinvolle relaties, met potentie voor meer impact.",
+    low: "De menselijke connectie wordt je grootste troef.",
   },
 };
 
