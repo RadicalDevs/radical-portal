@@ -18,12 +18,16 @@ export default function Navigation() {
     setMenuOpen(false);
   }, [pathname]);
 
+  // Re-check auth on every route change (catches server-side login redirects)
   useEffect(() => {
     const supabase = createClient();
-    // Check session immediately, then listen for changes
     supabase.auth.getSession().then(({ data }) => {
       setIsLoggedIn(!!data.session);
     });
+  }, [pathname]);
+
+  useEffect(() => {
+    const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(!!session);
     });
