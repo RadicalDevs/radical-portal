@@ -365,7 +365,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
                     </p>
                   </div>
                 ) : (
-                  /* ── Not logged in: teaser + CTA ── */
+                  /* ── Not logged in: teaser + CTA (gecombineerd) ── */
                   <div className="relative overflow-hidden rounded-2xl border border-smaragd/30 bg-gradient-to-br from-smaragd/10 via-surface to-coral/5 p-8 text-center sm:p-10">
                     <div className="pointer-events-none absolute left-1/2 top-0 h-[200px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-smaragd/10 blur-[80px]" />
                     <p className="text-sm font-semibold uppercase tracking-widest text-smaragd">
@@ -394,15 +394,18 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
                         </div>
                       </div>
                     </div>
-                    <p className="mx-auto mt-5 max-w-sm text-muted">
-                      Maak een gratis account aan om je gecombineerde APAC-score te ontgrendelen en je volledige profiel te bekijken.
+                    <h2 className="mt-6 font-heading text-xl font-bold text-heading sm:text-2xl">
+                      Wil je meer weten?
+                    </h2>
+                    <p className="mx-auto mt-3 max-w-md text-muted">
+                      Maak een gratis account aan voor je gecombineerde score, persoonlijke coaching door Nelieke, en toegang tot onze community van AI-professionals.
                     </p>
                     <Link
                       href={`/auth/register?session=${sessionId}`}
-                      className="mt-6 inline-flex items-center gap-2 rounded-[8px] bg-smaragd px-7 py-3.5 text-base font-semibold text-white shadow-lg transition-all hover:bg-smaragd-dark hover:shadow-xl"
+                      className="mt-6 inline-flex items-center gap-2 rounded-[8px] bg-smaragd px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:bg-smaragd-dark hover:shadow-xl"
                     >
-                      Ontgrendel je score
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      Maak een account aan
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
                       </svg>
                     </Link>

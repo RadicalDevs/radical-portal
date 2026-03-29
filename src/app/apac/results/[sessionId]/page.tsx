@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { getSessionResults } from "../../actions";
 import { createClient } from "@/lib/supabase/server";
 import ResultsClient from "./ResultsClient";
@@ -51,31 +50,6 @@ export default async function ApacResultsPage({
           />
         </div>
 
-        {/* CTA Block — alleen voor niet-ingelogde gebruikers */}
-        {!isLoggedIn && (
-          <div className="mt-12 rounded-[12px] border border-smaragd/30 bg-gradient-to-br from-smaragd/10 to-surface p-5 text-center sm:p-8 md:p-10">
-            <h2 className="font-heading text-2xl font-bold text-heading">
-              Wil je meer weten?
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-muted">
-              Maak een account aan voor de volledige uitleg van je scores,
-              persoonlijke coaching door Nelieke, en toegang tot onze community van
-              AI-professionals.
-            </p>
-            <Link
-              href={`/auth/register?session=${sessionId}`}
-              className="mt-6 inline-flex items-center gap-2 rounded-[8px] bg-smaragd px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:bg-smaragd-dark hover:shadow-xl"
-            >
-              Maak een account aan
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </Link>
-            <p className="mt-4 text-xs text-muted">
-              Gratis account — je resultaten worden gekoppeld aan je profiel.
-            </p>
-          </div>
-        )}
       </div>
     </main>
   );
