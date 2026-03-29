@@ -278,6 +278,36 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6 }}
         >
+          {/* Chapeau text — appears after splash */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7 }}
+            className="mb-8 text-center"
+          >
+            <p className="text-sm font-semibold uppercase tracking-widest text-smaragd">
+              Jouw resultaten
+            </p>
+            <h1 className="mt-2 font-heading text-3xl font-bold text-heading sm:text-4xl">
+              {gecombineerd >= 8
+                ? "Uitzonderlijk profiel"
+                : gecombineerd >= 6.5
+                ? "Sterk profiel"
+                : gecombineerd >= 5
+                ? "Veelbelovend profiel"
+                : "Jouw startpunt"}
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-lg text-muted">
+              {gecombineerd >= 8
+                ? "Je scoort bovengemiddeld op alle menselijke kwaliteiten. Je combineert aanpassingsvermogen, persoonlijkheid, bewustzijn en verbinding op een manier die zeldzaam is in de AI-sector."
+                : gecombineerd >= 6.5
+                ? "Je menselijke kwaliteiten vormen een solide basis. Je hebt duidelijke sterke punten en weet deze in te zetten. Ontdek hieronder waar je je nog verder kunt ontwikkelen."
+                : gecombineerd >= 5
+                ? "Je hebt een interessante mix van kwaliteiten. Er zit potentie in je profiel — met de juiste begeleiding kun je hier veel meer uit halen."
+                : "Iedereen begint ergens. Je APAC-resultaten laten zien waar je nu staat en waar de meeste groei mogelijk is. Dit is het begin van je ontwikkeltraject."}
+            </p>
+          </motion.div>
+
           {/* Radar Chart with dramatic entrance */}
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
