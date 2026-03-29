@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import RadarChart from "@/components/apac/RadarChart";
@@ -16,6 +17,8 @@ import {
 interface Props {
   scores: ApacScores;
   gecombineerd: number;
+  sessionId: string;
+  isLoggedIn: boolean;
 }
 
 /** Score-afhankelijke beschrijvingen per dimensie */
@@ -73,7 +76,7 @@ const ANALYZING_STEPS = [
   "Profiel samenstellen…",
 ];
 
-export default function ResultsClient({ scores, gecombineerd }: Props) {
+export default function ResultsClient({ scores, gecombineerd, sessionId, isLoggedIn }: Props) {
   const [phase, setPhase] = useState(PHASE_SPLASH);
   const [splashStep, setSplashStep] = useState(0);
   const [showChart, setShowChart] = useState(false);
@@ -333,37 +336,79 @@ export default function ResultsClient({ scores, gecombineerd }: Props) {
                 transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
                 className="mt-12"
               >
-                <div className="relative overflow-hidden rounded-2xl border border-smaragd/30 bg-gradient-to-br from-smaragd/10 via-surface to-coral/5 p-8 text-center sm:p-10">
-                  {/* Background glow */}
-                  <div className="pointer-events-none absolute left-1/2 top-0 h-[200px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-smaragd/10 blur-[80px]" />
-
-                  <p className="text-sm font-semibold uppercase tracking-widest text-smaragd">
-                    Gecombineerde score
-                  </p>
-
-                  <motion.div
-                    className="mt-4 font-heading text-7xl font-bold sm:text-8xl"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #2ed573 0%, #E6734F 100%)",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text",
-                    }}
-                  >
-                    {countedScore}%
-                  </motion.div>
-
-                  <p className="mx-auto mt-4 max-w-md text-muted">
-                    {gecombineerd >= 8
-                      ? "Uitzonderlijk. Je menselijke kwaliteiten plaatsen je in de top van AI-professionals."
-                      : gecombineerd >= 6.5
-                      ? "Sterk. Je hebt een solide basis van menselijke kwaliteiten om op voort te bouwen."
-                      : gecombineerd >= 5
-                      ? "Veelbelovend. Met de juiste begeleiding kun je hier veel meer uit halen."
-                      : "Een startpunt. Iedereen begint ergens — dit is het begin van je groei."}
-                  </p>
-                </div>
+                {isLoggedIn ? (
+                  /* ── Logged in: show real score ── */
+                  <div className="relative overflow-hidden rounded-2xl border border-smaragd/30 bg-gradient-to-br from-smaragd/10 via-surface to-coral/5 p-8 text-center sm:p-10">
+                    <div className="pointer-events-none absolute left-1/2 top-0 h-[200px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-smaragd/10 blur-[80px]" />
+                    <p className="text-sm font-semibold uppercase tracking-widest text-smaragd">
+                      Gecombineerde score
+                    </p>
+                    <motion.div
+                      className="mt-4 font-heading text-7xl font-bold sm:text-8xl"
+                      style={{
+                        background: "linear-gradient(135deg, #2ed573 0%, #E6734F 100%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                      }}
+                    >
+                      {countedScore}%
+                    </motion.div>
+                    <p className="mx-auto mt-4 max-w-md text-muted">
+                      {gecombineerd >= 8
+                        ? "Uitzonderlijk. Je menselijke kwaliteiten plaatsen je in de top van AI-professionals."
+                        : gecombineerd >= 6.5
+                        ? "Sterk. Je hebt een solide basis van menselijke kwaliteiten om op voort te bouwen."
+                        : gecombineerd >= 5
+                        ? "Veelbelovend. Met de juiste begeleiding kun je hier veel meer uit halen."
+                        : "Een startpunt. Iedereen begint ergens — dit is het begin van je groei."}
+                    </p>
+                  </div>
+                ) : (
+                  /* ── Not logged in: teaser + CTA ── */
+                  <div className="relative overflow-hidden rounded-2xl border border-smaragd/30 bg-gradient-to-br from-smaragd/10 via-surface to-coral/5 p-8 text-center sm:p-10">
+                    <div className="pointer-events-none absolute left-1/2 top-0 h-[200px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-smaragd/10 blur-[80px]" />
+                    <p className="text-sm font-semibold uppercase tracking-widest text-smaragd">
+                      Gecombineerde score
+                    </p>
+                    {/* Blurred/locked score */}
+                    <div className="relative mt-4 flex items-center justify-center">
+                      <div
+                        className="select-none font-heading text-7xl font-bold blur-lg sm:text-8xl"
+                        style={{
+                          background: "linear-gradient(135deg, #2ed573 0%, #E6734F 100%)",
+                          WebkitBackgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                          backgroundClip: "text",
+                        }}
+                        aria-hidden="true"
+                      >
+                        ??%
+                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex items-center gap-2 rounded-full border border-smaragd/40 bg-surface/90 px-4 py-2 backdrop-blur-sm">
+                          <svg className="h-4 w-4 text-smaragd" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                          </svg>
+                          <span className="text-sm font-semibold text-heading">Vergrendeld</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mx-auto mt-5 max-w-sm text-muted">
+                      Maak een gratis account aan om je gecombineerde APAC-score te ontgrendelen en je volledige profiel te bekijken.
+                    </p>
+                    <Link
+                      href={`/auth/register?session=${sessionId}`}
+                      className="mt-6 inline-flex items-center gap-2 rounded-[8px] bg-smaragd px-7 py-3.5 text-base font-semibold text-white shadow-lg transition-all hover:bg-smaragd-dark hover:shadow-xl"
+                    >
+                      Ontgrendel je score
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </Link>
+                    <p className="mt-3 text-xs text-muted">Gratis — je resultaten worden aan je profiel gekoppeld.</p>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

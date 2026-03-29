@@ -13,16 +13,22 @@ export default function ScoreCard({ dimension, score, description, animated = fa
   const label = DIMENSION_LABELS[dimension];
   const color = DIMENSION_COLORS[dimension];
   const percentage = scoreToPercentage(score);
-  const [displayPercentage, setDisplayPercentage] = useState(animated ? 0 : percentage);
-  const [barWidth, setBarWidth] = useState(animated ? 0 : percentage);
+  const [displayPercentage, setDisplayPercentage] = useState(0);
+  const [barWidth, setBarWidth] = useState(0);
 
   useEffect(() => {
-    if (!animated) return;
+    if (!animated) {
+      setDisplayPercentage(percentage);
+      setBarWidth(percentage);
+      return;
+    }
 
-    // Animate the bar width
+    // Reset to 0 immediately to prevent flicker
+    setDisplayPercentage(0);
+    setBarWidth(0);
+
     const barTimer = setTimeout(() => setBarWidth(percentage), 100);
 
-    // Animate the counter
     const duration = 1000;
     const start = Date.now();
     let raf: number;
@@ -37,7 +43,7 @@ export default function ScoreCard({ dimension, score, description, animated = fa
 
     const startTimer = setTimeout(() => {
       raf = requestAnimationFrame(tick);
-    }, 150);
+    }, 50);
 
     return () => {
       clearTimeout(barTimer);
