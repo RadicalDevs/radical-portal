@@ -15,7 +15,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 
 // Routes that don't require authentication
-const PUBLIC_PATHS = ["/", "/apac", "/auth"];
+const PUBLIC_PATHS = ["/", "/apac", "/auth", "/api/webhooks"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(

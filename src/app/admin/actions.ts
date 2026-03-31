@@ -6,6 +6,36 @@ import { createServiceClient } from "@/lib/supabase/server";
 import type { ApacDimension, ApacFormConfig } from "@/lib/apac/types";
 
 // ---------------------------------------------------------------------------
+// Shared types (Question Analytics)
+// ---------------------------------------------------------------------------
+
+export interface QuestionAnalyticsData {
+  questions: QuestionAnalyticsItem[];
+  totalRespondents: number;
+  totalPortal: number;
+  totalTally: number;
+  totalManual: number;
+}
+
+export interface QuestionAnalyticsRespondent {
+  kandidaatId: string;
+  naam: string;
+  email: string;
+}
+
+export interface QuestionAnalyticsItem {
+  id: string;
+  questionText: string;
+  variable: string;
+  weight: number;
+  sortOrder: number;
+  isActive: boolean;
+  totalAnswers: number;
+  averageScore: number;
+  distribution: { label: string; value: number; count: number; percentage: number; respondents: QuestionAnalyticsRespondent[] }[];
+}
+
+// ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
@@ -83,6 +113,7 @@ export interface AdminApacQuestion {
   weight: number;
   sort_order: number;
   is_active: boolean;
+  tally_field_id: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -314,17 +345,20 @@ export async function importKandidaat(
 
   const submittedAt = datum ? new Date(datum).toISOString() : new Date().toISOString();
 
-  const { error: aErr } = await db.from("apac_resultaten").insert({
-    kandidaat_id: kandidaat.id,
-    adaptability,
-    personality,
-    awareness,
-    connection,
-    bron: "manual",
-    is_seed: false,
-    created_at: submittedAt,
-    updated_at: submittedAt,
-  });
+  const { error: aErr } = await db.from("apac_resultaten").upsert(
+    {
+      kandidaat_id: kandidaat.id,
+      adaptability,
+      personality,
+      awareness,
+      connection,
+      bron: "manual",
+      is_seed: false,
+      created_at: submittedAt,
+      updated_at: submittedAt,
+    },
+    { onConflict: "kandidaat_id" }
+  );
 
   if (aErr) {
     console.error("[importKandidaat] apac_resultaten error:", aErr);
@@ -406,17 +440,20 @@ export async function importKandidatenBulk(
     }
 
     const submittedAt = datum ? new Date(datum).toISOString() : new Date().toISOString();
-    await db.from("apac_resultaten").insert({
-      kandidaat_id: kandidaat.id,
-      adaptability,
-      personality,
-      awareness,
-      connection,
-      bron: "manual",
-      is_seed: false,
-      created_at: submittedAt,
-      updated_at: submittedAt,
-    });
+    await db.from("apac_resultaten").upsert(
+      {
+        kandidaat_id: kandidaat.id,
+        adaptability,
+        personality,
+        awareness,
+        connection,
+        bron: "manual",
+        is_seed: false,
+        created_at: submittedAt,
+        updated_at: submittedAt,
+      },
+      { onConflict: "kandidaat_id" }
+    );
 
     results.success++;
   }
@@ -568,7 +605,7 @@ export async function getAdminApacQuestions(): Promise<AdminApacQuestion[]> {
   const db = createServiceClient();
   const { data, error } = await db
     .from("apac_questions")
-    .select("id, question_text, options, variable, weight, sort_order, is_active")
+    .select("id, question_text, options, variable, weight, sort_order, is_active, tally_field_id")
     .order("sort_order", { ascending: true });
 
   if (error) {
@@ -583,6 +620,7 @@ const QuestionSchema = z.object({
   variable: z.string().min(1),
   weight: z.coerce.number().min(0.1).max(5).default(1),
   is_active: z.boolean().default(true),
+  tally_field_id: z.string().max(200).nullable().optional(),
   options: z.string().transform((val, ctx) => {
     try {
       return JSON.parse(val) as { label: string; value: number }[];
@@ -601,11 +639,13 @@ export async function updateApacQuestion(
   id: string,
   formData: FormData
 ): Promise<QuestionMutationResult> {
+  const tallyRaw = formData.get("tally_field_id");
   const parsed = QuestionSchema.safeParse({
     question_text: formData.get("question_text"),
     variable: formData.get("variable"),
     weight: formData.get("weight"),
     is_active: formData.get("is_active") === "true",
+    tally_field_id: tallyRaw && String(tallyRaw).trim() ? String(tallyRaw).trim() : null,
     options: formData.get("options"),
   });
 
@@ -631,11 +671,13 @@ export async function updateApacQuestion(
 export async function addApacQuestion(
   formData: FormData
 ): Promise<QuestionMutationResult> {
+  const tallyRaw = formData.get("tally_field_id");
   const parsed = QuestionSchema.safeParse({
     question_text: formData.get("question_text"),
     variable: formData.get("variable"),
     weight: formData.get("weight"),
     is_active: true,
+    tally_field_id: tallyRaw && String(tallyRaw).trim() ? String(tallyRaw).trim() : null,
     options: formData.get("options"),
   });
 
@@ -817,4 +859,136 @@ export async function updateFormConfig(
   revalidatePath("/admin/apac-form");
   revalidatePath("/apac/test");
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// 10. Question Analytics — antwoorden per vraag
+// ---------------------------------------------------------------------------
+
+export async function getQuestionAnalytics(
+  period?: "week" | "month" | "all"
+): Promise<QuestionAnalyticsData> {
+  const db = createServiceClient();
+
+  // Bepaal tijdsfilter
+  let sinceDate: string | null = null;
+  if (period === "week") {
+    sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  } else if (period === "month") {
+    sinceDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  // Haal alle vragen op (actief + inactief voor historische data)
+  const { data: questions, error: qErr } = await db
+    .from("apac_questions")
+    .select("id, question_text, options, variable, weight, sort_order, is_active")
+    .order("sort_order", { ascending: true });
+
+  if (qErr || !questions) {
+    console.error("[getQuestionAnalytics] questions error:", qErr);
+    return { questions: [], totalRespondents: 0, totalPortal: 0, totalTally: 0, totalManual: 0 };
+  }
+
+  // Haal alle antwoorden op inclusief kandidaat_id (met optioneel tijdsfilter)
+  let antwoordQuery = db
+    .from("apac_antwoorden")
+    .select("question_id, answer_value, session_id, kandidaat_id");
+
+  if (sinceDate) {
+    antwoordQuery = antwoordQuery.gte("created_at", sinceDate);
+  }
+
+  const { data: antwoorden, error: aErr } = await antwoordQuery;
+
+  if (aErr) {
+    console.error("[getQuestionAnalytics] antwoorden error:", aErr);
+    return { questions: [], totalRespondents: 0, totalPortal: 0, totalTally: 0, totalManual: 0 };
+  }
+
+  // Haal kandidaat-namen op voor alle betrokken kandidaten
+  const kandidaatIds = [...new Set((antwoorden ?? []).map((a) => a.kandidaat_id).filter(Boolean))];
+  const kandidaatMap = new Map<string, { naam: string; email: string }>();
+  if (kandidaatIds.length > 0) {
+    const { data: kandidaten } = await db
+      .from("kandidaten")
+      .select("id, voornaam, achternaam, email")
+      .in("id", kandidaatIds);
+    for (const k of kandidaten ?? []) {
+      kandidaatMap.set(k.id, {
+        naam: [k.voornaam, k.achternaam].filter(Boolean).join(" ").trim() || k.email,
+        email: k.email,
+      });
+    }
+  }
+
+  // Tel unieke sessies in apac_antwoorden (portal + tally via webhook)
+  const uniqueSessions = new Set((antwoorden ?? []).map((a) => a.session_id));
+
+  // Tel ALLE respondenten per bron uit apac_resultaten
+  let bronQuery = db
+    .from("apac_resultaten")
+    .select("bron")
+    .eq("is_seed", false);
+  if (sinceDate) {
+    bronQuery = bronQuery.gte("created_at", sinceDate);
+  }
+  const { data: bronData } = await bronQuery;
+  const totalPortal = (bronData ?? []).filter((r) => r.bron === "portal").length;
+  const totalTally = (bronData ?? []).filter((r) => r.bron === "tally").length;
+  const totalManual = (bronData ?? []).filter((r) => r.bron === "manual" || r.bron === "typeform").length;
+  const totalRespondents = (bronData ?? []).length;
+
+  // Groepeer antwoorden per vraag: value → [{kandidaatId, naam, email}]
+  type AnswerEntry = { value: number; kandidaatId: string };
+  const answersByQuestion = new Map<string, AnswerEntry[]>();
+  for (const a of antwoorden ?? []) {
+    const arr = answersByQuestion.get(a.question_id) ?? [];
+    arr.push({ value: Number(a.answer_value), kandidaatId: a.kandidaat_id });
+    answersByQuestion.set(a.question_id, arr);
+  }
+
+  // Bouw analytics per vraag
+  const analyticsItems: QuestionAnalyticsItem[] = questions.map((q) => {
+    const answers = answersByQuestion.get(q.id) ?? [];
+    const totalAnswers = answers.length;
+    const averageScore =
+      totalAnswers > 0
+        ? Math.round((answers.reduce((s, v) => s + v.value, 0) / totalAnswers) * 10) / 10
+        : 0;
+
+    // Verdeling per antwoordoptie met respondenten
+    const options = (q.options as { label: string; value: number }[]) ?? [];
+    const distribution = options.map((opt) => {
+      const matching = answers.filter((v) => v.value === opt.value);
+      const respondents: QuestionAnalyticsRespondent[] = matching.map((v) => {
+        const k = kandidaatMap.get(v.kandidaatId);
+        return {
+          kandidaatId: v.kandidaatId,
+          naam: k?.naam ?? "Onbekend",
+          email: k?.email ?? "",
+        };
+      });
+      return {
+        label: opt.label,
+        value: opt.value,
+        count: matching.length,
+        percentage: totalAnswers > 0 ? Math.round((matching.length / totalAnswers) * 1000) / 10 : 0,
+        respondents,
+      };
+    });
+
+    return {
+      id: q.id,
+      questionText: q.question_text,
+      variable: q.variable,
+      weight: q.weight,
+      sortOrder: q.sort_order,
+      isActive: q.is_active,
+      totalAnswers,
+      averageScore,
+      distribution,
+    };
+  });
+
+  return { questions: analyticsItems, totalRespondents, totalPortal, totalTally, totalManual };
 }

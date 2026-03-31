@@ -324,20 +324,41 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
   // ---- Persist results ----
   const kandidaatId = session.linked_kandidaat_id;
 
-  // 1. INSERT apac_resultaten (matches actual DB schema: individual score columns)
-  const { error: insertError } = await supabase.from("apac_resultaten").insert({
-    kandidaat_id: kandidaatId,
-    adaptability: scores.adaptability,
-    personality: scores.personality,
-    awareness: scores.awareness,
-    connection: scores.connection,
-    bron: "portal",
-    is_seed: false,
-    portal_session_id: sessionId,
-  });
+  // 1. UPSERT apac_resultaten (unique constraint on kandidaat_id)
+  const { error: insertError } = await supabase.from("apac_resultaten").upsert(
+    {
+      kandidaat_id: kandidaatId,
+      adaptability: scores.adaptability,
+      personality: scores.personality,
+      awareness: scores.awareness,
+      connection: scores.connection,
+      bron: "portal",
+      is_seed: false,
+      portal_session_id: sessionId,
+    },
+    { onConflict: "kandidaat_id" }
+  );
 
   if (insertError) {
-    console.error("[submitApacTest] apac_resultaten insert error:", insertError);
+    console.error("[submitApacTest] apac_resultaten upsert error:", insertError);
+    return { success: false, error: "Kon APAC-resultaten niet opslaan. Probeer het opnieuw." };
+  }
+
+  // 1b. INSERT apac_antwoorden — individuele antwoorden per vraag
+  const antwoordRows = questions.map((q) => ({
+    session_id: sessionId,
+    kandidaat_id: kandidaatId,
+    question_id: q.id,
+    answer_value: answers[q.id],
+  }));
+
+  const { error: antwoordError } = await supabase
+    .from("apac_antwoorden")
+    .insert(antwoordRows);
+
+  if (antwoordError) {
+    console.error("[submitApacTest] apac_antwoorden insert error:", antwoordError);
+    return { success: false, error: "Kon antwoorden niet opslaan. Probeer het opnieuw." };
   }
 
   // 2. UPDATE kandidaten.pool_status via De Poort beslissing
