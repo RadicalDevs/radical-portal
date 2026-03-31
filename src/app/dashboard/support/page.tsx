@@ -1,10 +1,54 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getDashboardData } from "@/app/dashboard/actions";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Coaching — Radical Portal",
 };
 
-export default function SupportPage() {
+export default async function SupportPage() {
+  const data = await getDashboardData();
+  if (!data) redirect("/auth/login");
+
+  if (!data.scores) {
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-16 sm:px-8">
+        <div className="mx-auto w-full max-w-md text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-smaragd/10">
+            <svg
+              className="h-8 w-8 text-smaragd"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+              />
+            </svg>
+          </div>
+          <h1 className="mt-6 font-heading text-2xl font-bold text-heading">
+            Coaching nog niet beschikbaar
+          </h1>
+          <p className="mt-3 text-muted">
+            Je kunt pas een gesprek inplannen met Nelieke nadat je de APAC-test
+            hebt gemaakt. De test duurt ongeveer 20 minuten.
+          </p>
+          <Link
+            href="/apac"
+            className="mt-8 inline-flex items-center gap-2 rounded-[8px] bg-smaragd px-6 py-3 font-semibold text-white shadow transition-all hover:bg-smaragd-dark"
+          >
+            Start de APAC-test
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex flex-1 flex-col px-4 py-8 sm:px-8">
       <div className="mx-auto w-full max-w-3xl">

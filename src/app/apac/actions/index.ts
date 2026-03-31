@@ -365,11 +365,13 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
   //    Leerfase → "prospect" (Nelieke reviewt handmatig)
   //    Actieve fase → pool_status op basis van drempelscores
   //    Mapping: "pool" → "in_selectie", "pending_review" → "prospect"
-  const poolStatusMap: Record<string, string> = {
-    pool: "in_selectie",
-    pending_review: "prospect",
-  };
-  const newPoolStatus = poolStatusMap[poortDecision.newPoolStatus] ?? "prospect";
+  // Leerfase: altijd prospect (handmatige review door Nelieke)
+  // Actieve fase: pool → in_selectie, pending_review → prospect
+  const newPoolStatus = poortDecision.leerfase
+    ? "prospect"
+    : poortDecision.newPoolStatus === "pool"
+      ? "in_selectie"
+      : "prospect";
 
   await supabase
     .from("kandidaten")

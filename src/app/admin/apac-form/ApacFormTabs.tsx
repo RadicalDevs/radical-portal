@@ -4,12 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import ApacFormClient from "./ApacFormClient";
 import FormConfigClient from "./FormConfigClient";
+import QuestionAnalyticsClient from "./QuestionAnalyticsClient";
 import type { AdminApacQuestion } from "../actions";
 import type { ApacFormConfig } from "@/lib/apac/types";
 
 const TABS = [
   { id: "vragen", label: "Vragen" },
   { id: "configuratie", label: "Formulier instellingen" },
+  { id: "analyse", label: "Vraag Analyse" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -71,6 +73,7 @@ export default function ApacFormTabs({
       {/* Tab content */}
       {activeTab === "vragen" && <ApacFormClient questions={questions} />}
       {activeTab === "configuratie" && <FormConfigClient config={formConfig} />}
+      {activeTab === "analyse" && <QuestionAnalyticsClient />}
     </div>
   );
 }

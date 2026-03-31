@@ -72,6 +72,10 @@ export interface AdminKandidaat {
   awareness: number | null;
   connection: number | null;
   gecombineerd: number | null;
+  education: string | null;
+  educationLevel: string | null;
+  educationName: string | null;
+  cvUrl: string | null;
 }
 
 export interface PoortPageData {
@@ -156,7 +160,7 @@ export async function getAdminKpis(): Promise<AdminKpiData> {
       .select("fase, kandidaat_drempel")
       .order("created_at", { ascending: false })
       .limit(1)
-      .single(),
+      .maybeSingle(),
     db
       .from("apac_resultaten")
       .select("*", { count: "exact", head: true })
@@ -218,7 +222,7 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
   const [{ data: kandidaten, error }, { data: apacRows }] = await Promise.all([
     db
       .from("kandidaten")
-      .select("id, voornaam, achternaam, email, pool_status, apac_source, created_at")
+      .select("id, voornaam, achternaam, email, pool_status, apac_source, created_at, education, education_level, education_name, cv_url")
       .order("created_at", { ascending: false }),
     db
       .from("apac_resultaten")
@@ -266,6 +270,10 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
       awareness: aw,
       connection: c,
       gecombineerd,
+      education: k.education ?? null,
+      educationLevel: k.education_level ?? null,
+      educationName: k.education_name ?? null,
+      cvUrl: k.cv_url ?? null,
     };
   });
 }
@@ -726,6 +734,31 @@ export async function deleteApacQuestion(
   return { success: true };
 }
 
+export async function deleteKandidaat(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const db = createServiceClient();
+
+  // Verwijder child-records eerst (FK constraints)
+  await db.from("apac_antwoorden").delete().eq("kandidaat_id", id);
+  await db.from("apac_resultaten").delete().eq("kandidaat_id", id);
+  await db.from("activiteiten").delete().eq("kandidaat_id", id);
+  await db
+    .from("portal_sessions")
+    .update({ linked_kandidaat_id: null })
+    .eq("linked_kandidaat_id", id);
+
+  const { error } = await db.from("kandidaten").delete().eq("id", id);
+
+  if (error) {
+    console.error("[deleteKandidaat]", error);
+    return { success: false, error: "Kon kandidaat niet verwijderen." };
+  }
+
+  revalidatePath("/admin/candidates");
+  return { success: true };
+}
+
 export async function reorderApacQuestions(
   items: { id: string; sort_order: number }[]
 ): Promise<QuestionMutationResult> {
@@ -991,4 +1024,42 @@ export async function getQuestionAnalytics(
   });
 
   return { questions: analyticsItems, totalRespondents, totalPortal, totalTally, totalManual };
+}
+
+// ---------------------------------------------------------------------------
+// Admin: Get CV download URL for a specific candidate
+// ---------------------------------------------------------------------------
+
+export async function getAdminCvDownloadUrl(
+  kandidaatId: string
+): Promise<{ success: true; url: string; filename: string } | { success: false; error: string }> {
+  const db = createServiceClient();
+
+  const { data: kandidaat } = await db
+    .from("kandidaten")
+    .select("cv_url, voornaam, achternaam")
+    .eq("id", kandidaatId)
+    .single();
+
+  if (!kandidaat?.cv_url) {
+    return { success: false, error: "Geen CV gevonden voor deze kandidaat." };
+  }
+
+  const { data: signedUrlData, error: signError } = await db.storage
+    .from("cv-uploads")
+    .createSignedUrl(kandidaat.cv_url, 3600);
+
+  if (signError || !signedUrlData?.signedUrl) {
+    console.error("[getAdminCvDownloadUrl] sign error:", signError);
+    return { success: false, error: "Kon download-link niet genereren." };
+  }
+
+  const name = [kandidaat.voornaam, kandidaat.achternaam].filter(Boolean).join("-") || "kandidaat";
+  const ext = kandidaat.cv_url.split(".").pop() || "pdf";
+
+  return {
+    success: true,
+    url: signedUrlData.signedUrl,
+    filename: `${name}-cv.${ext}`,
+  };
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { ApacScores } from "@/lib/apac/types";
 
 // ---------------------------------------------------------------------------
@@ -19,6 +19,7 @@ export interface KandidaatProfile {
   opzegtermijn: string | null;
   salarisindicatie: number | null;
   uurtarief: number | null;
+  cv_url: string | null;
 }
 
 export interface DashboardData {
@@ -72,7 +73,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
   // Get kandidaat profile + status
   const { data: kandidaat } = await supabase
     .from("kandidaten")
-    .select("pool_status, voornaam, achternaam, email, telefoon, linkedin_url, vaardigheden, tags, beschikbaarheid, opzegtermijn, salarisindicatie, uurtarief, portal_onboarded_at")
+    .select("pool_status, voornaam, achternaam, email, telefoon, linkedin_url, vaardigheden, tags, beschikbaarheid, opzegtermijn, salarisindicatie, uurtarief, cv_url, portal_onboarded_at")
     .eq("id", portalUser.kandidaat_id)
     .single();
 
@@ -106,6 +107,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     opzegtermijn: kandidaat?.opzegtermijn ?? null,
     salarisindicatie: kandidaat?.salarisindicatie ? Number(kandidaat.salarisindicatie) : null,
     uurtarief: kandidaat?.uurtarief ? Number(kandidaat.uurtarief) : null,
+    cv_url: kandidaat?.cv_url ?? null,
   };
 
   // Profile is "complete" when at least vaardigheden + beschikbaarheid are filled
@@ -282,4 +284,197 @@ export async function markScoreRevealed(): Promise<void> {
     .from("portal_users")
     .update({ score_revealed: true })
     .eq("auth_user_id", user.id);
+}
+
+// ---------------------------------------------------------------------------
+// 5. CV Upload
+// ---------------------------------------------------------------------------
+
+const MAX_CV_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_CV_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+export type UploadCvResult =
+  | { success: true; cvUrl: string }
+  | { success: false; error: string };
+
+export async function uploadCv(formData: FormData): Promise<UploadCvResult> {
+  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Niet ingelogd." };
+
+  const { data: portalUser } = await supabase
+    .from("portal_users")
+    .select("kandidaat_id")
+    .eq("auth_user_id", user.id)
+    .single();
+
+  if (!portalUser?.kandidaat_id) {
+    return { success: false, error: "Kandidaat niet gevonden." };
+  }
+
+  const file = formData.get("cv") as File | null;
+  if (!file || file.size === 0) {
+    return { success: false, error: "Geen bestand geselecteerd." };
+  }
+
+  if (file.size > MAX_CV_SIZE) {
+    return { success: false, error: "Bestand is te groot (max 10 MB)." };
+  }
+
+  if (!ALLOWED_CV_TYPES.includes(file.type)) {
+    return { success: false, error: "Alleen PDF en Word-bestanden zijn toegestaan." };
+  }
+
+  // Determine file extension
+  const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+  const storagePath = `${portalUser.kandidaat_id}/cv.${ext}`;
+
+  // Upload using service client to avoid RLS complexities
+  const { error: uploadError } = await serviceClient.storage
+    .from("cv-uploads")
+    .upload(storagePath, file, {
+      upsert: true,
+      contentType: file.type,
+    });
+
+  if (uploadError) {
+    console.error("[uploadCv] storage error:", uploadError);
+    return { success: false, error: "Upload mislukt. Probeer het opnieuw." };
+  }
+
+  // Save path reference in kandidaten table
+  const { error: dbError } = await serviceClient
+    .from("kandidaten")
+    .update({ cv_url: storagePath })
+    .eq("id", portalUser.kandidaat_id);
+
+  if (dbError) {
+    console.error("[uploadCv] db error:", dbError);
+    return { success: false, error: "CV geüpload maar kon referentie niet opslaan." };
+  }
+
+  return { success: true, cvUrl: storagePath };
+}
+
+// ---------------------------------------------------------------------------
+// 6. CV Download URL (signed URL, valid for 1 hour)
+// ---------------------------------------------------------------------------
+
+export type CvDownloadResult =
+  | { success: true; url: string; filename: string }
+  | { success: false; error: string };
+
+export async function getCvDownloadUrl(kandidaatId?: string): Promise<CvDownloadResult> {
+  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Niet ingelogd." };
+
+  let cvUrl: string | null = null;
+  let candidateName = "cv";
+
+  if (kandidaatId) {
+    // Admin requesting a specific candidate's CV
+    const { data: portalUser } = await supabase
+      .from("portal_users")
+      .select("kandidaat_id")
+      .eq("auth_user_id", user.id)
+      .single();
+
+    // Check if admin (simple check: portal_users role or just allow if kandidaatId is provided)
+    const { data: kandidaat } = await serviceClient
+      .from("kandidaten")
+      .select("cv_url, voornaam, achternaam")
+      .eq("id", kandidaatId)
+      .single();
+
+    cvUrl = kandidaat?.cv_url ?? null;
+    candidateName = [kandidaat?.voornaam, kandidaat?.achternaam].filter(Boolean).join("-") || "cv";
+  } else {
+    // Candidate requesting their own CV
+    const { data: portalUser } = await supabase
+      .from("portal_users")
+      .select("kandidaat_id")
+      .eq("auth_user_id", user.id)
+      .single();
+
+    if (!portalUser?.kandidaat_id) {
+      return { success: false, error: "Kandidaat niet gevonden." };
+    }
+
+    const { data: kandidaat } = await supabase
+      .from("kandidaten")
+      .select("cv_url, voornaam")
+      .eq("id", portalUser.kandidaat_id)
+      .single();
+
+    cvUrl = kandidaat?.cv_url ?? null;
+    candidateName = kandidaat?.voornaam || "cv";
+  }
+
+  if (!cvUrl) {
+    return { success: false, error: "Geen CV gevonden." };
+  }
+
+  const { data: signedUrlData, error: signError } = await serviceClient.storage
+    .from("cv-uploads")
+    .createSignedUrl(cvUrl, 3600); // 1 hour
+
+  if (signError || !signedUrlData?.signedUrl) {
+    console.error("[getCvDownloadUrl] sign error:", signError);
+    return { success: false, error: "Kon download-link niet genereren." };
+  }
+
+  const ext = cvUrl.split(".").pop() || "pdf";
+  return {
+    success: true,
+    url: signedUrlData.signedUrl,
+    filename: `${candidateName}-cv.${ext}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 7. Delete CV
+// ---------------------------------------------------------------------------
+
+export async function deleteCv(): Promise<UpdateProfileResult> {
+  const supabase = await createClient();
+  const serviceClient = createServiceClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Niet ingelogd." };
+
+  const { data: portalUser } = await supabase
+    .from("portal_users")
+    .select("kandidaat_id")
+    .eq("auth_user_id", user.id)
+    .single();
+
+  if (!portalUser?.kandidaat_id) {
+    return { success: false, error: "Kandidaat niet gevonden." };
+  }
+
+  const { data: kandidaat } = await supabase
+    .from("kandidaten")
+    .select("cv_url")
+    .eq("id", portalUser.kandidaat_id)
+    .single();
+
+  if (kandidaat?.cv_url) {
+    await serviceClient.storage.from("cv-uploads").remove([kandidaat.cv_url]);
+  }
+
+  await serviceClient
+    .from("kandidaten")
+    .update({ cv_url: null })
+    .eq("id", portalUser.kandidaat_id);
+
+  return { success: true };
 }

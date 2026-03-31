@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { updateProfile } from "@/app/dashboard/actions";
+import { updateProfile, uploadCv, deleteCv } from "@/app/dashboard/actions";
 import type { KandidaatProfile } from "@/app/dashboard/actions";
 
 interface Props {
@@ -39,6 +39,10 @@ export default function ProfileModal({ profile, open, onClose }: Props) {
   });
 
   const [skillInput, setSkillInput] = useState("");
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [cvUploading, setCvUploading] = useState(false);
+  const [hasCv, setHasCv] = useState(!!profile.cv_url);
+  const cvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -85,6 +89,21 @@ export default function ProfileModal({ profile, open, onClose }: Props) {
       if (!result.success) {
         setError(result.error);
         return;
+      }
+
+      // Upload CV if a new file was selected
+      if (cvFile) {
+        setCvUploading(true);
+        const cvFd = new FormData();
+        cvFd.set("cv", cvFile);
+        const cvResult = await uploadCv(cvFd);
+        setCvUploading(false);
+        if (!cvResult.success) {
+          setError(cvResult.error);
+          return;
+        }
+        setHasCv(true);
+        setCvFile(null);
       }
 
       setSuccess(true);
@@ -319,6 +338,74 @@ export default function ProfileModal({ profile, open, onClose }: Props) {
               />
             </div>
           </div>
+
+          {/* CV Upload */}
+          <div className="rounded-[8px] border border-smaragd/20 bg-smaragd/5 p-4">
+            <label className="block text-sm font-medium text-label">
+              CV uploaden
+            </label>
+            <p className="mt-0.5 text-xs text-muted">
+              Upload je CV zodat wij nog betere inzichten over jou krijgen. PDF of Word, max 10 MB.
+            </p>
+
+            {hasCv && !cvFile && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-smaragd/10 px-3 py-1 text-xs font-medium text-smaragd">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                  CV geüpload
+                </span>
+                <button
+                  type="button"
+                  onClick={() => cvInputRef.current?.click()}
+                  className="text-xs text-smaragd hover:underline"
+                >
+                  Vervangen
+                </button>
+              </div>
+            )}
+
+            {cvFile && (
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <svg className="h-4 w-4 text-smaragd" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                <span className="flex-1 truncate text-heading">{cvFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => { setCvFile(null); if (cvInputRef.current) cvInputRef.current.value = ""; }}
+                  className="text-xs text-muted hover:text-heading"
+                >
+                  Verwijderen
+                </button>
+              </div>
+            )}
+
+            {!cvFile && !hasCv && (
+              <button
+                type="button"
+                onClick={() => cvInputRef.current?.click()}
+                className="mt-2 inline-flex items-center gap-2 rounded-[8px] border border-dashed border-surface-border px-4 py-2.5 text-sm text-muted transition-colors hover:border-smaragd hover:text-smaragd"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                Selecteer bestand
+              </button>
+            )}
+
+            <input
+              ref={cvInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setCvFile(file);
+              }}
+            />
+          </div>
         </div>
 
         {/* Footer */}
@@ -339,10 +426,10 @@ export default function ProfileModal({ profile, open, onClose }: Props) {
             </button>
             <button
               type="submit"
-              disabled={isPending || form.vaardigheden.length === 0 || form.beschikbaarheid === null}
+              disabled={isPending || cvUploading || form.vaardigheden.length === 0 || form.beschikbaarheid === null}
               className="rounded-[8px] bg-smaragd px-6 py-2.5 text-sm font-semibold text-white hover:bg-smaragd-dark disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isPending ? "Opslaan..." : "Profiel opslaan"}
+              {cvUploading ? "CV uploaden..." : isPending ? "Opslaan..." : "Profiel opslaan"}
             </button>
           </div>
         </div>

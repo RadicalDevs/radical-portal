@@ -100,8 +100,8 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
               Maak je profiel compleet
             </p>
             <p className="text-xs text-muted">
-              Voeg je vaardigheden en beschikbaarheid toe zodat we je beter
-              kunnen matchen.
+              Voeg je vaardigheden en beschikbaarheid toe en vergeet je CV niet
+              te uploaden zodat wij nog betere inzichten over jou hebben.
             </p>
           </div>
           <svg className="h-5 w-5 shrink-0 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -298,8 +298,9 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
             color={data.kandidaat.profile.linkedin_url ? "#3B82F6" : undefined}
           />
           <ProfileField
-            label="Salaris"
-            value={data.kandidaat.profile.salarisindicatie ? `EUR ${data.kandidaat.profile.salarisindicatie.toLocaleString("nl-NL")}` : null}
+            label="CV"
+            value={data.kandidaat.profile.cv_url ? "Geüpload" : null}
+            color={data.kandidaat.profile.cv_url ? "#2ed573" : undefined}
           />
         </div>
 

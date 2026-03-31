@@ -269,6 +269,7 @@ function QuestionEditor({
       }
 
       // Build updated question object for optimistic update
+      const tallyFieldRaw = fd.get("tally_field_id");
       const updated: AdminApacQuestion = {
         id: question?.id ?? crypto.randomUUID(),
         question_text: fd.get("question_text") as string,
@@ -277,6 +278,7 @@ function QuestionEditor({
         weight: Number(fd.get("weight")),
         sort_order: question?.sort_order ?? 999,
         is_active: isActive,
+        tally_field_id: tallyFieldRaw && String(tallyFieldRaw).trim() ? String(tallyFieldRaw).trim() : null,
       };
       onSaved(updated);
     });
@@ -365,6 +367,24 @@ function QuestionEditor({
             className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-body focus:border-smaragd focus:outline-none"
           />
         </div>
+      </div>
+
+      {/* Tally Field ID */}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-label">
+          Tally veld ID
+          <span className="ml-1 font-normal text-muted">(optioneel — voor webhook synchronisatie)</span>
+        </label>
+        <input
+          name="tally_field_id"
+          type="text"
+          defaultValue={question?.tally_field_id ?? ""}
+          className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-body placeholder:text-muted focus:border-smaragd focus:outline-none font-mono"
+          placeholder="bijv. question_abc123"
+        />
+        <p className="mt-1 text-xs text-muted">
+          Kopieer de veld-key uit je Tally formulier (te vinden in de Tally editor onder elk vraagveld).
+        </p>
       </div>
 
       {/* Options JSON */}

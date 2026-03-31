@@ -100,81 +100,55 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
   const email = typeof emailField?.value === "string" ? emailField.value.trim().toLowerCase() : null;
   const voornaam = typeof firstNameField?.value === "string" ? firstNameField.value.trim() : "Onbekend";
 
+  // --- Extraheer education velden ---
+  // Tally velden: "HBO or University" (DROPDOWN), "Bachelor, Master or not completed" (CHECKBOXES), "Education" (DROPDOWN)
+  const educationField = fields.find((f) =>
+    (f.type === "MULTIPLE_CHOICE" || f.type === "DROPDOWN" || f.type === "CHECKBOXES") &&
+    (f.label.toLowerCase().includes("hbo or university") || f.label.toLowerCase().includes("hbo of universiteit"))
+  );
+  const educationLevelField = fields.find((f) =>
+    (f.type === "MULTIPLE_CHOICE" || f.type === "DROPDOWN" || f.type === "CHECKBOXES") &&
+    (f.label.toLowerCase().includes("bachelor") || f.label.toLowerCase().includes("master"))
+  );
+  const educationNameField = fields.find((f) =>
+    (f.type === "DROPDOWN" || f.type === "MULTIPLE_CHOICE") &&
+    f.label.toLowerCase() === "education"
+  );
+
+  const education = extractChoiceText(educationField);
+  const educationLevel = extractChoiceText(educationLevelField);
+  const educationName = extractChoiceText(educationNameField);
+
   if (!email) {
     console.warn("[tally-webhook] No email found in submission:", payload.data.responseId);
     return NextResponse.json({ error: "E-mailadres niet gevonden in formulier" }, { status: 422 });
   }
 
-  // --- Haal alle apac_questions op met tally_field_id ---
-  const { data: questions, error: qErr } = await supabase
-    .from("apac_questions")
-    .select("id, variable, weight, tally_field_id, options")
-    .not("tally_field_id", "is", null)
-    .eq("is_active", true);
+  // --- Extraheer scores direct uit Tally CALCULATED_FIELDS ---
+  // Tally berekent scores per dimensie als som van vraagpunten.
+  // Max per APAC-dimensie = 5 vragen × 10 punten = 50.
+  const MAX_APAC_RAW = 50;
 
-  if (qErr) {
-    console.error("[tally-webhook] questions error:", qErr);
-    return NextResponse.json({ error: "DB fout" }, { status: 500 });
+  function getTallyCalculatedScore(label: string): number | null {
+    const field = fields.find(
+      (f) => f.type === "CALCULATED_FIELDS" &&
+             f.label.toLowerCase() === label.toLowerCase()
+    );
+    if (!field || typeof field.value !== "number") return null;
+    return Math.max(1, Math.min(10, Math.round((field.value / MAX_APAC_RAW) * 100) / 10));
   }
 
-  if (!questions || questions.length === 0) {
-    console.warn("[tally-webhook] No questions with tally_field_id configured");
-    return NextResponse.json({ error: "Geen vraagkoppelingen geconfigureerd" }, { status: 422 });
+  const adaptability = getTallyCalculatedScore("Adaptability");
+  const personality  = getTallyCalculatedScore("Personality");
+  const awareness    = getTallyCalculatedScore("Awareness");
+  const connection   = getTallyCalculatedScore("Connection");
+
+  if (adaptability === null || personality === null || awareness === null || connection === null) {
+    console.warn("[tally-webhook] CALCULATED_FIELDS niet gevonden in submission:", payload.data.responseId);
+    return NextResponse.json({ error: "Scores niet gevonden in Tally payload" }, { status: 422 });
   }
 
-  // --- Map Tally veldwaarden naar numerieke antwoorden per vraag ---
-  type QuestionRow = typeof questions[number];
-
-  const tallyFieldMap = new Map<string, TallyField>(fields.map((f) => [f.key, f]));
-
-  const mappedAnswers: { question: QuestionRow; answerValue: number }[] = [];
-
-  for (const q of questions) {
-    const tallyField = tallyFieldMap.get(q.tally_field_id!);
-    if (!tallyField) continue;
-
-    const numericValue = extractNumericValue(tallyField, q.options as { label: string; value: number }[]);
-    if (numericValue === null) continue;
-
-    mappedAnswers.push({ question: q, answerValue: numericValue });
-  }
-
-  if (mappedAnswers.length === 0) {
-    console.warn("[tally-webhook] No matched answers for submission:", payload.data.responseId);
-    return NextResponse.json({ error: "Geen gekoppelde vragen gevonden" }, { status: 422 });
-  }
-
-  // --- Bereken gewogen scores per dimensie ---
-  const allDimensions = [
-    ...APAC_DIMENSIONS,
-    "b5_openness", "b5_conscientiousness", "b5_extraversion", "b5_agreeableness", "b5_stability",
-  ];
-  const dimensionTotals: Record<string, { weightedSum: number; totalWeight: number }> = {};
-  for (const dim of allDimensions) {
-    dimensionTotals[dim] = { weightedSum: 0, totalWeight: 0 };
-  }
-
-  for (const { question: q, answerValue } of mappedAnswers) {
-    const dim = q.variable as string;
-    if (dimensionTotals[dim]) {
-      dimensionTotals[dim].weightedSum += answerValue * (q.weight ?? 1);
-      dimensionTotals[dim].totalWeight += q.weight ?? 1;
-    }
-  }
-
-  const scores: ApacScores = {
-    adaptability: 0,
-    personality: 0,
-    awareness: 0,
-    connection: 0,
-  };
-
-  for (const dim of APAC_DIMENSIONS) {
-    const t = dimensionTotals[dim];
-    scores[dim] = t.totalWeight > 0
-      ? Math.max(1, Math.min(10, Math.round((t.weightedSum / t.totalWeight) * 10) / 10))
-      : 1;
-  }
+  const scores: ApacScores = { adaptability, personality, awareness, connection };
 
   const validation = validateApacScores(scores);
   if (!validation.valid) {
@@ -202,6 +176,9 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
         email,
         pool_status: "prospect",
         apac_source: "tally",
+        ...(education && { education }),
+        ...(educationLevel && { education_level: educationLevel }),
+        ...(educationName && { education_name: educationName }),
       })
       .select("id")
       .single();
@@ -259,11 +236,13 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
   const sessionId = sessionData?.id ?? null;
 
   // --- apac_resultaten opslaan ---
-  const poolStatusMap: Record<string, string> = {
-    pool: "in_selectie",
-    pending_review: "prospect",
-  };
-  const newPoolStatus = poolStatusMap[poortDecision.newPoolStatus] ?? "prospect";
+  // Leerfase: altijd prospect (handmatige review door Nelieke)
+  // Actieve fase: pool → in_selectie, pending_review → prospect
+  const newPoolStatus = poortDecision.leerfase
+    ? "prospect"
+    : poortDecision.newPoolStatus === "pool"
+      ? "in_selectie"
+      : "prospect";
 
   const { error: resultatenError } = await supabase.from("apac_resultaten").upsert(
     {
@@ -290,27 +269,17 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
 
   await supabase
     .from("kandidaten")
-    .update({ pool_status: newPoolStatus, apac_source: "tally" })
+    .update({
+      pool_status: newPoolStatus,
+      apac_source: "tally",
+      ...(education && { education }),
+      ...(educationLevel && { education_level: educationLevel }),
+      ...(educationName && { education_name: educationName }),
+    })
     .eq("id", kandidaatId);
 
-  // --- Individuele antwoorden opslaan in apac_antwoorden ---
-  if (sessionId) {
-    const antwoordRows = mappedAnswers.map(({ question: q, answerValue }) => ({
-      session_id: sessionId,
-      kandidaat_id: kandidaatId,
-      question_id: q.id,
-      answer_value: answerValue,
-      created_at: submittedAt,
-    }));
-
-    const { error: antwoordError } = await supabase
-      .from("apac_antwoorden")
-      .insert(antwoordRows);
-
-    if (antwoordError) {
-      console.error("[tally-webhook] apac_antwoorden error:", antwoordError);
-    }
-  }
+  // Individuele antwoorden worden niet opgeslagen voor Tally-inzendingen
+  // (Tally stuurt alleen CALCULATED_FIELDS, geen individuele antwoorden)
 
   // --- Activiteit loggen ---
   await supabase.from("activiteiten").insert({
@@ -352,6 +321,8 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
       ((scores.adaptability + scores.personality + scores.awareness + scores.connection) / 4) * 10
     ) / 10;
 
+    const profileUrl = `https://crm.radicalai.nl/kandidaten/${kandidaatId}`;
+
     await sendEmail({
       to: notifEmails,
       subject: `Nieuwe APAC-test voltooid — ${voornaam}`,
@@ -375,8 +346,11 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
               <td style="padding:8px 12px;text-align:right">${gecombineerdScore}</td>
             </tr>
           </table>
-          <p style="color:#999;font-size:12px">
-            Bekijk het kandidaatprofiel in het Radical Portal admin dashboard.
+          <a href="${profileUrl}" style="display:inline-block;background:#1a2e1a;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin-bottom:16px">
+            Bekijk kandidaatprofiel →
+          </a>
+          <p style="color:#999;font-size:12px;margin-top:16px">
+            Of kopieer deze link: <a href="${profileUrl}" style="color:#999">${profileUrl}</a>
           </p>
         </div>
       `,
@@ -389,6 +363,19 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
 // ---------------------------------------------------------------------------
 // Hulpfunctie: extraheer numerieke waarde uit een Tally veld
 // ---------------------------------------------------------------------------
+
+function extractChoiceText(field: TallyField | undefined): string | null {
+  if (!field) return null;
+  if (typeof field.value === "string") return field.value.trim() || null;
+  if (Array.isArray(field.value) && field.options) {
+    // Map selected option IDs to their text labels
+    const texts = field.value
+      .map((id) => field.options!.find((o) => o.id === id)?.text?.trim())
+      .filter(Boolean);
+    return texts.length > 0 ? texts.join(", ") : null;
+  }
+  return null;
+}
 
 function extractNumericValue(
   field: TallyField,

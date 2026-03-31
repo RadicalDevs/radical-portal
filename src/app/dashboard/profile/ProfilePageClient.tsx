@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import ProfileModal from "@/components/profile/ProfileModal";
+import { getCvDownloadUrl } from "../actions";
 import type { KandidaatProfile } from "../actions";
 
 interface Props {
@@ -149,6 +150,58 @@ export default function ProfilePageClient({ profile, profileComplete }: Props) {
                 className="rounded-xl bg-smaragd px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-smaragd-dark hover:shadow-[0_0_20px_rgba(46,213,115,0.3)]"
               >
                 Skills toevoegen
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+
+      {/* CV */}
+      <motion.div custom={0.55} variants={fadeInUp} initial="hidden" animate="visible">
+        <div className="glass mt-5 rounded-2xl p-6 sm:p-8">
+          <h2 className="font-heading text-lg font-bold text-heading">CV</h2>
+          {profile.cv_url ? (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-smaragd/10">
+                <svg className="h-5 w-5 text-smaragd" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-heading">CV geüpload</p>
+                <p className="text-xs text-muted">{profile.cv_url.split("/").pop()}</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const result = await getCvDownloadUrl();
+                  if (result.success) {
+                    window.open(result.url, "_blank");
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-smaragd/10 px-4 py-2 text-sm font-medium text-smaragd transition-all hover:bg-smaragd/20"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Download
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-coral/10">
+                <svg className="h-5 w-5 text-coral" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-heading">Nog geen CV geüpload</p>
+                <p className="text-xs text-muted">Upload je CV via de profiel-editor zodat wij betere inzichten over jou krijgen.</p>
+              </div>
+              <button
+                onClick={() => setEditing(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-smaragd/10 px-4 py-2 text-sm font-medium text-smaragd transition-all hover:bg-smaragd/20"
+              >
+                Uploaden
               </button>
             </div>
           )}

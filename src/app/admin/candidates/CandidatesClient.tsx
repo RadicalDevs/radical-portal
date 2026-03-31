@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import RadarChart from "@/components/apac/RadarChart";
 import type { AdminKandidaat } from "../actions";
+import { deleteKandidaat, getAdminCvDownloadUrl } from "../actions";
 
 const POOL_STATUS: Record<string, { label: string; cls: string }> = {
   prospect:    { label: "Prospect",     cls: "bg-surface-light text-muted" },
@@ -32,6 +34,7 @@ export default function CandidatesClient({
 }: {
   kandidaten: AdminKandidaat[];
 }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterSource, setFilterSource] = useState("all");
@@ -134,13 +137,16 @@ export default function CandidatesClient({
                 Status <SortIcon col="poolStatus" />
               </Th>
               <Th onClick={() => toggleSort("apacSource")}>Bron</Th>
+              <Th>Universiteit</Th>
+              <Th>Diploma</Th>
+              <Th>Opleiding</Th>
               <Th>Detail</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-border">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-10 text-center text-muted">
+                <td colSpan={11} className="py-10 text-center text-muted">
                   Geen kandidaten gevonden.
                 </td>
               </tr>
@@ -183,6 +189,15 @@ export default function CandidatesClient({
                 <td className="px-4 py-3 text-muted">
                   {SOURCE_LABELS[k.apacSource] ?? k.apacSource}
                 </td>
+                <td className="px-4 py-3 text-xs text-muted">
+                  {k.education ?? "—"}
+                </td>
+                <td className="px-4 py-3 text-xs text-muted">
+                  {k.educationLevel ?? "—"}
+                </td>
+                <td className="px-4 py-3 text-xs text-muted">
+                  {k.educationName ?? "—"}
+                </td>
                 <td className="px-4 py-3">
                   <button
                     onClick={() => setSelected(k)}
@@ -199,7 +214,14 @@ export default function CandidatesClient({
 
       {/* Detail modal */}
       {selected && (
-        <DetailModal kandidaat={selected} onClose={() => setSelected(null)} />
+        <DetailModal
+          kandidaat={selected}
+          onClose={() => setSelected(null)}
+          onDeleted={() => {
+            setSelected(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );
@@ -227,10 +249,28 @@ function Th({
 function DetailModal({
   kandidaat,
   onClose,
+  onDeleted,
 }: {
   kandidaat: AdminKandidaat;
   onClose: () => void;
+  onDeleted: () => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true);
+    setDeleteError(null);
+    const result = await deleteKandidaat(kandidaat.id);
+    if (result.success) {
+      onDeleted();
+    } else {
+      setDeleteError(result.error ?? "Onbekende fout");
+      setDeleting(false);
+    }
+  }
+
   const hasScores =
     kandidaat.adaptability !== null &&
     kandidaat.personality !== null &&
@@ -283,7 +323,23 @@ function DetailModal({
           <span className="inline-flex rounded-full bg-surface-light px-2.5 py-0.5 text-xs text-muted">
             {SOURCE_LABELS[kandidaat.apacSource] ?? kandidaat.apacSource}
           </span>
+          {kandidaat.education && (
+            <span className="inline-flex rounded-full bg-surface-light px-2.5 py-0.5 text-xs text-muted">
+              {kandidaat.education}
+            </span>
+          )}
+          {kandidaat.educationLevel && (
+            <span className="inline-flex rounded-full bg-surface-light px-2.5 py-0.5 text-xs text-muted">
+              {kandidaat.educationLevel}
+            </span>
+          )}
         </div>
+
+        {kandidaat.educationName && (
+          <p className="mt-2 text-sm text-muted">
+            Opleiding: <span className="text-body">{kandidaat.educationName}</span>
+          </p>
+        )}
 
         {scores ? (
           <div className="mt-6 flex justify-center">
@@ -334,6 +390,65 @@ function DetailModal({
           {kandidaat.apacDate &&
             ` · APAC: ${new Date(kandidaat.apacDate).toLocaleDateString("nl-NL")}`}
         </p>
+
+        {/* CV Download */}
+        <div className="mt-4">
+          {kandidaat.cvUrl ? (
+            <button
+              onClick={async () => {
+                const result = await getAdminCvDownloadUrl(kandidaat.id);
+                if (result.success) {
+                  window.open(result.url, "_blank");
+                }
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-smaragd/30 bg-smaragd/5 px-3 py-2.5 text-sm font-medium text-smaragd transition-colors hover:bg-smaragd/10"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              CV downloaden
+            </button>
+          ) : (
+            <p className="text-center text-xs text-muted/60">Geen CV geüpload</p>
+          )}
+        </div>
+
+        {/* Delete sectie */}
+        <div className="mt-5 border-t border-surface-border pt-4">
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full rounded-lg border border-red-800/30 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-900/20 transition-colors"
+            >
+              Kandidaat verwijderen
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-center text-xs text-red-400 font-medium">
+                Weet je zeker dat je <strong>{kandidaat.voornaam} {kandidaat.achternaam}</strong> wilt verwijderen? Dit kan niet ongedaan worden.
+              </p>
+              {deleteError && (
+                <p className="text-center text-xs text-red-500">{deleteError}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="flex-1 rounded-lg border border-surface-border px-3 py-2 text-xs font-medium text-muted hover:bg-surface-light transition-colors"
+                >
+                  Annuleren
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 rounded-lg bg-red-900/40 border border-red-800/40 px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-900/60 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? "Verwijderen…" : "Ja, verwijder"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

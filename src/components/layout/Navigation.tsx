@@ -11,6 +11,7 @@ export default function Navigation() {
   const router = useRouter();
   const isAdmin = pathname.startsWith("/admin");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [hasCompletedTest, setHasCompletedTest] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Close mobile menu on route change
@@ -21,8 +22,27 @@ export default function Navigation() {
   // Re-check auth on every route change (catches server-side login redirects)
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       setIsLoggedIn(!!data.session);
+      if (data.session) {
+        const { data: portalUser } = await supabase
+          .from("portal_users")
+          .select("kandidaat_id")
+          .single();
+        if (portalUser?.kandidaat_id) {
+          const { data: scores } = await supabase
+            .from("apac_resultaten")
+            .select("id")
+            .eq("kandidaat_id", portalUser.kandidaat_id)
+            .limit(1)
+            .single();
+          setHasCompletedTest(!!scores);
+        } else {
+          setHasCompletedTest(false);
+        }
+      } else {
+        setHasCompletedTest(false);
+      }
     });
   }, [pathname]);
 
@@ -51,7 +71,7 @@ export default function Navigation() {
     ? [
         { href: "/dashboard", label: "Dashboard" },
         { href: "/dashboard/results", label: "Resultaten" },
-        { href: "/dashboard/support", label: "Coaching" },
+        ...(hasCompletedTest ? [{ href: "/dashboard/support", label: "Coaching" }] : []),
         { href: "/dashboard/profile", label: "Profiel" },
       ]
     : [];
@@ -69,7 +89,7 @@ export default function Navigation() {
         {/* Desktop nav links (hidden on mobile) */}
         <div className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => {
-            const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
+            const isActive = pathname === link.href || (link.href !== "/admin" && pathname.startsWith(link.href + "/"));
             return (
               <Link
                 key={link.href}
@@ -142,7 +162,7 @@ export default function Navigation() {
         <div className="border-t border-surface-border/60 bg-surface/95 backdrop-blur-md md:hidden">
           <div className="space-y-1 px-4 py-3">
             {navLinks.map((link) => {
-              const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
+              const isActive = pathname === link.href || (link.href !== "/admin" && pathname.startsWith(link.href + "/"));
               return (
                 <Link
                   key={link.href}
