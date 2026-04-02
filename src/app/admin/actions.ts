@@ -228,7 +228,7 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
   const [{ data: kandidaten, error }, { data: apacRows }] = await Promise.all([
     db
       .from("kandidaten")
-      .select("id, voornaam, achternaam, email, telefoon, linkedin_url, pool_status, apac_source, created_at, education, education_level, education_name, cv_url, vaardigheden, tags, beschikbaarheid, notities")
+      .select("id, voornaam, achternaam, email, telefoon, linkedin_url, pool_status, apac_source, created_at, education, education_level, education_name, cv_url")
       .order("created_at", { ascending: false }),
     db
       .from("apac_resultaten")
@@ -282,12 +282,32 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
       educationLevel: k.education_level ?? null,
       educationName: k.education_name ?? null,
       cvUrl: k.cv_url ?? null,
-      vaardigheden: k.vaardigheden ?? [],
-      tags: k.tags ?? [],
-      beschikbaarheid: k.beschikbaarheid ?? null,
-      notities: k.notities ?? null,
+      vaardigheden: [],
+      tags: [],
+      beschikbaarheid: null,
+      notities: null,
     };
   });
+}
+
+// Fetch full details for detail modal (lazy load)
+export async function getAdminKandidaatDetails(id: string): Promise<Partial<AdminKandidaat> | null> {
+  const db = createServiceClient();
+
+  const { data: k, error } = await db
+    .from("kandidaten")
+    .select("vaardigheden, tags, beschikbaarheid, notities")
+    .eq("id", id)
+    .single();
+
+  if (error || !k) return null;
+
+  return {
+    vaardigheden: k.vaardigheden ?? [],
+    tags: k.tags ?? [],
+    beschikbaarheid: k.beschikbaarheid ?? null,
+    notities: k.notities ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------

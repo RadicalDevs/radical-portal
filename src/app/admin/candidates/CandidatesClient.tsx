@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import RadarChart from "@/components/apac/RadarChart";
 import type { AdminKandidaat } from "../actions";
-import { deleteKandidaat, getAdminCvDownloadUrl } from "../actions";
+import { deleteKandidaat, getAdminCvDownloadUrl, getAdminKandidaatDetails } from "../actions";
 
 const POOL_STATUS: Record<string, { label: string; cls: string }> = {
   prospect:    { label: "Prospect",     cls: "bg-surface-light text-muted" },
@@ -274,6 +274,22 @@ function DetailModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [details, setDetails] = useState<{ vaardigheden: string[]; tags: string[]; beschikbaarheid: boolean | null; notities: string | null } | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(true);
+
+  useEffect(() => {
+    getAdminKandidaatDetails(kandidaat.id).then((d) => {
+      if (d) {
+        setDetails({
+          vaardigheden: d.vaardigheden ?? [],
+          tags: d.tags ?? [],
+          beschikbaarheid: d.beschikbaarheid ?? null,
+          notities: d.notities ?? null,
+        });
+      }
+      setLoadingDetails(false);
+    });
+  }, [kandidaat.id]);
 
   async function handleDelete() {
     setDeleting(true);
@@ -365,45 +381,49 @@ function DetailModal({
           </p>
         )}
 
-        {kandidaat.vaardigheden.length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Vaardigheden</p>
-            <div className="flex flex-wrap gap-1.5">
-              {kandidaat.vaardigheden.map((v) => (
-                <span key={v} className="inline-flex rounded-full bg-smaragd/10 px-2.5 py-0.5 text-xs font-medium text-smaragd">
-                  {v}
+        {!loadingDetails && details && (
+          <>
+            {details.vaardigheden.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Vaardigheden</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {details.vaardigheden.map((v) => (
+                    <span key={v} className="inline-flex rounded-full bg-smaragd/10 px-2.5 py-0.5 text-xs font-medium text-smaragd">
+                      {v}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {details.tags.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Tags</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {details.tags.map((t) => (
+                    <span key={t} className="inline-flex rounded-full bg-coral/10 px-2.5 py-0.5 text-xs font-medium text-coral">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {details.beschikbaarheid !== null && (
+              <p className="mt-2 text-sm text-muted">
+                Beschikbaarheid: <span className={details.beschikbaarheid ? "text-smaragd font-medium" : "text-coral font-medium"}>
+                  {details.beschikbaarheid ? "Beschikbaar" : "Niet beschikbaar"}
                 </span>
-              ))}
-            </div>
-          </div>
-        )}
+              </p>
+            )}
 
-        {kandidaat.tags.length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Tags</p>
-            <div className="flex flex-wrap gap-1.5">
-              {kandidaat.tags.map((t) => (
-                <span key={t} className="inline-flex rounded-full bg-coral/10 px-2.5 py-0.5 text-xs font-medium text-coral">
-                  {t}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {kandidaat.beschikbaarheid !== null && (
-          <p className="mt-2 text-sm text-muted">
-            Beschikbaarheid: <span className={kandidaat.beschikbaarheid ? "text-smaragd font-medium" : "text-coral font-medium"}>
-              {kandidaat.beschikbaarheid ? "Beschikbaar" : "Niet beschikbaar"}
-            </span>
-          </p>
-        )}
-
-        {kandidaat.notities && (
-          <div className="mt-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Notities</p>
-            <p className="text-sm text-body whitespace-pre-wrap rounded-lg bg-surface-light p-3">{kandidaat.notities}</p>
-          </div>
+            {details.notities && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Notities</p>
+                <p className="text-sm text-body whitespace-pre-wrap rounded-lg bg-surface-light p-3">{details.notities}</p>
+              </div>
+            )}
+          </>
         )}
 
         {scores ? (
