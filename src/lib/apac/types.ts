@@ -12,7 +12,7 @@ export interface ApacScores {
 }
 
 /** Via welk kanaal zijn de APAC-scores binnengekomen */
-export type ApacBron = "tally" | "portal" | "manual" | "typeform";
+export type ApacBron = "tally" | "portal" | "manual" | "typeform" | "crm";
 
 /** De vier APAC dimensie-namen */
 export type ApacDimension = keyof ApacScores;

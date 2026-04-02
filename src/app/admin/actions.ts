@@ -63,6 +63,8 @@ export interface AdminKandidaat {
   voornaam: string;
   achternaam: string;
   email: string | null;
+  telefoon: string | null;
+  linkedinUrl: string | null;
   poolStatus: string;
   apacSource: string;
   createdAt: string;
@@ -76,6 +78,10 @@ export interface AdminKandidaat {
   educationLevel: string | null;
   educationName: string | null;
   cvUrl: string | null;
+  vaardigheden: string[];
+  tags: string[];
+  beschikbaarheid: boolean | null;
+  notities: string | null;
 }
 
 export interface PoortPageData {
@@ -222,7 +228,7 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
   const [{ data: kandidaten, error }, { data: apacRows }] = await Promise.all([
     db
       .from("kandidaten")
-      .select("id, voornaam, achternaam, email, pool_status, apac_source, created_at, education, education_level, education_name, cv_url")
+      .select("id, voornaam, achternaam, email, telefoon, linkedin_url, pool_status, apac_source, created_at, education, education_level, education_name, cv_url, vaardigheden, tags, beschikbaarheid, notities")
       .order("created_at", { ascending: false }),
     db
       .from("apac_resultaten")
@@ -261,6 +267,8 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
       voornaam: k.voornaam,
       achternaam: k.achternaam,
       email: k.email,
+      telefoon: k.telefoon ?? null,
+      linkedinUrl: k.linkedin_url ?? null,
       poolStatus: k.pool_status,
       apacSource: k.apac_source,
       createdAt: k.created_at,
@@ -274,6 +282,10 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
       educationLevel: k.education_level ?? null,
       educationName: k.education_name ?? null,
       cvUrl: k.cv_url ?? null,
+      vaardigheden: k.vaardigheden ?? [],
+      tags: k.tags ?? [],
+      beschikbaarheid: k.beschikbaarheid ?? null,
+      notities: k.notities ?? null,
     };
   });
 }
@@ -1024,6 +1036,189 @@ export async function getQuestionAnalytics(
   });
 
   return { questions: analyticsItems, totalRespondents, totalPortal, totalTally, totalManual };
+}
+
+// ---------------------------------------------------------------------------
+// 11. Analytics dashboard
+// ---------------------------------------------------------------------------
+
+export interface AnalyticsKpis {
+  totaalGetest: number;
+  gemiddeldeGecombineerd: number;
+  doorstroomPercentage: number;
+  gemiddeldePerDimensie: {
+    adaptability: number;
+    personality: number;
+    awareness: number;
+    connection: number;
+  };
+}
+
+export interface OpleidingsniveauRow {
+  level: string;
+  count: number;
+  adaptability: number;
+  personality: number;
+  awareness: number;
+  connection: number;
+  gecombineerd: number;
+}
+
+export interface WeeklyInstroomRow {
+  weekLabel: string;
+  count: number;
+}
+
+export interface PoolStatusRow {
+  status: string;
+  count: number;
+  percentage: number;
+}
+
+export interface AnalyticsData {
+  kpis: AnalyticsKpis;
+  opleidingsniveaus: OpleidingsniveauRow[];
+  populatieRadar: {
+    adaptability: number;
+    personality: number;
+    awareness: number;
+    connection: number;
+  };
+  weeklyInstroom: WeeklyInstroomRow[];
+  poolStatusVerdeling: PoolStatusRow[];
+  hasData: boolean;
+}
+
+export async function getAnalyticsData(): Promise<AnalyticsData> {
+  const db = createServiceClient();
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+
+  const empty: AnalyticsData = {
+    kpis: {
+      totaalGetest: 0,
+      gemiddeldeGecombineerd: 0,
+      doorstroomPercentage: 0,
+      gemiddeldePerDimensie: { adaptability: 0, personality: 0, awareness: 0, connection: 0 },
+    },
+    opleidingsniveaus: [],
+    populatieRadar: { adaptability: 0, personality: 0, awareness: 0, connection: 0 },
+    weeklyInstroom: [],
+    poolStatusVerdeling: [],
+    hasData: false,
+  };
+
+  const [{ data: apacRows, error: apacErr }, { data: kandidatenRows, error: kErr }] =
+    await Promise.all([
+      db
+        .from("apac_resultaten")
+        .select("kandidaat_id, adaptability, personality, awareness, connection, created_at")
+        .eq("is_seed", false),
+      db.from("kandidaten").select("id, pool_status, education_level"),
+    ]);
+
+  if (apacErr) console.error("[getAnalyticsData] apac error:", apacErr);
+  if (kErr) console.error("[getAnalyticsData] kandidaten error:", kErr);
+
+  const apac = apacRows ?? [];
+  const kandidaten = kandidatenRows ?? [];
+
+  if (apac.length === 0) return empty;
+
+  // Lookup map: kandidaat_id → kandidaat row
+  const kMap = new Map(kandidaten.map((k) => [k.id, k]));
+
+  // Per-row gecombineerd
+  const rows = apac.map((r) => {
+    const a = Number(r.adaptability);
+    const p = Number(r.personality);
+    const aw = Number(r.awareness);
+    const c = Number(r.connection);
+    return { ...r, a, p, aw, c, gecombineerd: (a + p + aw + c) / 4 };
+  });
+
+  // --- KPIs ---
+  const totaalGetest = rows.length;
+  const sumGecomb = rows.reduce((s, r) => s + r.gecombineerd, 0);
+  const gemiddeldeGecombineerd = r1(sumGecomb / totaalGetest);
+
+  const inPool = kandidaten.filter((k) =>
+    ["in_selectie", "pool", "radical"].includes(k.pool_status ?? "")
+  ).length;
+  const doorstroomPercentage =
+    kandidaten.length > 0 ? Math.round((inPool / kandidaten.length) * 100) : 0;
+
+  const avgDim = (key: "a" | "p" | "aw" | "c") =>
+    r1(rows.reduce((s, r) => s + r[key], 0) / totaalGetest);
+
+  const gemiddeldePerDimensie = {
+    adaptability: avgDim("a"),
+    personality: avgDim("p"),
+    awareness: avgDim("aw"),
+    connection: avgDim("c"),
+  };
+
+  // --- Opleidingsniveaus ---
+  const levelMap = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const k = kMap.get(r.kandidaat_id);
+    const level = k?.education_level?.trim() || "Onbekend";
+    const arr = levelMap.get(level) ?? [];
+    arr.push(r);
+    levelMap.set(level, arr);
+  }
+
+  const opleidingsniveaus: OpleidingsniveauRow[] = [];
+  for (const [level, lvRows] of levelMap) {
+    if (lvRows.length < 3) continue;
+    const n = lvRows.length;
+    opleidingsniveaus.push({
+      level,
+      count: n,
+      adaptability: r1(lvRows.reduce((s, r) => s + r.a, 0) / n),
+      personality: r1(lvRows.reduce((s, r) => s + r.p, 0) / n),
+      awareness: r1(lvRows.reduce((s, r) => s + r.aw, 0) / n),
+      connection: r1(lvRows.reduce((s, r) => s + r.c, 0) / n),
+      gecombineerd: r1(lvRows.reduce((s, r) => s + r.gecombineerd, 0) / n),
+    });
+  }
+  opleidingsniveaus.sort((a, b) => b.gecombineerd - a.gecombineerd);
+
+  // --- Weekly instroom (laatste 12 weken) ---
+  const now = new Date();
+  const weeklyInstroom: WeeklyInstroomRow[] = Array.from({ length: 12 }, (_, i) => {
+    const weekEnd = new Date(now.getTime() - (11 - i) * 7 * 24 * 60 * 60 * 1000);
+    const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const label = weekEnd.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+    const count = rows.filter((r) => {
+      const d = new Date(r.created_at);
+      return d >= weekStart && d < weekEnd;
+    }).length;
+    return { weekLabel: label, count };
+  });
+
+  // --- Pool status verdeling ---
+  const statusCounts = new Map<string, number>();
+  for (const k of kandidaten) {
+    const s = k.pool_status ?? "onbekend";
+    statusCounts.set(s, (statusCounts.get(s) ?? 0) + 1);
+  }
+  const totalK = kandidaten.length;
+  const poolStatusVerdeling: PoolStatusRow[] = [...statusCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([status, count]) => ({
+      status,
+      count,
+      percentage: totalK > 0 ? Math.round((count / totalK) * 100) : 0,
+    }));
+
+  return {
+    kpis: { totaalGetest, gemiddeldeGecombineerd, doorstroomPercentage, gemiddeldePerDimensie },
+    opleidingsniveaus,
+    populatieRadar: gemiddeldePerDimensie,
+    weeklyInstroom,
+    poolStatusVerdeling,
+    hasData: true,
+  };
 }
 
 // ---------------------------------------------------------------------------

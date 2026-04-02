@@ -18,6 +18,7 @@ const SOURCE_LABELS: Record<string, string> = {
   portal:   "Portal",
   manual:   "Manueel",
   typeform: "Typeform",
+  crm:      "CRM",
 };
 
 function formatDate(dateStr: string | null): string {
@@ -113,6 +114,7 @@ export default function CandidatesClient({
           <option value="tally">Tally</option>
           <option value="portal">Portal</option>
           <option value="manual">Manueel</option>
+          <option value="crm">CRM</option>
         </select>
         <span className="ml-auto text-sm text-muted">{filtered.length} kandidaten</span>
       </div>
@@ -300,7 +302,15 @@ function DetailModal({
             <h2 className="font-heading text-xl font-bold text-heading">
               {kandidaat.voornaam} {kandidaat.achternaam}
             </h2>
-            <p className="mt-0.5 text-sm text-muted">{kandidaat.email}</p>
+            <div className="mt-0.5 flex flex-col gap-0.5">
+              {kandidaat.email && <p className="text-sm text-muted">{kandidaat.email}</p>}
+              {kandidaat.telefoon && <p className="text-sm text-muted">{kandidaat.telefoon}</p>}
+              {kandidaat.linkedinUrl && (
+                <a href={kandidaat.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-smaragd hover:underline">
+                  LinkedIn
+                </a>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -339,6 +349,47 @@ function DetailModal({
           <p className="mt-2 text-sm text-muted">
             Opleiding: <span className="text-body">{kandidaat.educationName}</span>
           </p>
+        )}
+
+        {kandidaat.vaardigheden.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Vaardigheden</p>
+            <div className="flex flex-wrap gap-1.5">
+              {kandidaat.vaardigheden.map((v) => (
+                <span key={v} className="inline-flex rounded-full bg-smaragd/10 px-2.5 py-0.5 text-xs font-medium text-smaragd">
+                  {v}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {kandidaat.tags.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">Tags</p>
+            <div className="flex flex-wrap gap-1.5">
+              {kandidaat.tags.map((t) => (
+                <span key={t} className="inline-flex rounded-full bg-coral/10 px-2.5 py-0.5 text-xs font-medium text-coral">
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {kandidaat.beschikbaarheid !== null && (
+          <p className="mt-2 text-sm text-muted">
+            Beschikbaarheid: <span className={kandidaat.beschikbaarheid ? "text-smaragd font-medium" : "text-coral font-medium"}>
+              {kandidaat.beschikbaarheid ? "Beschikbaar" : "Niet beschikbaar"}
+            </span>
+          </p>
+        )}
+
+        {kandidaat.notities && (
+          <div className="mt-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Notities</p>
+            <p className="text-sm text-body whitespace-pre-wrap rounded-lg bg-surface-light p-3">{kandidaat.notities}</p>
+          </div>
         )}
 
         {scores ? (
