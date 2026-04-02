@@ -158,14 +158,14 @@ export default function CandidatesClient({
                 key={k.id}
                 className="transition-colors hover:bg-surface-light"
               >
-                <td className="px-4 py-3 font-medium text-heading">
+                <td className="px-3 py-2 font-medium text-heading">
                   {k.voornaam} {k.achternaam}
                 </td>
-                <td className="px-4 py-3 text-muted">{k.email ?? "—"}</td>
-                <td className="px-4 py-3 text-muted">
+                <td className="px-3 py-2 text-muted">{k.email ?? "—"}</td>
+                <td className="px-3 py-2 text-muted">
                   {formatDate(k.apacDate)}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   {k.gecombineerd !== null ? (
                     <span className="text-lg font-bold text-smaragd leading-none">
                       {k.gecombineerd.toFixed(1)}
@@ -174,7 +174,7 @@ export default function CandidatesClient({
                     <span className="text-muted">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   {k.adaptability !== null ? (
                     <div className="flex gap-1">
                       {([
@@ -193,7 +193,7 @@ export default function CandidatesClient({
                     <span className="text-muted">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   <span
                     className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       (POOL_STATUS[k.poolStatus] ?? POOL_STATUS.prospect).cls
@@ -202,19 +202,19 @@ export default function CandidatesClient({
                     {(POOL_STATUS[k.poolStatus] ?? POOL_STATUS.prospect).label}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-muted">
+                <td className="px-3 py-2 text-muted">
                   {SOURCE_LABELS[k.apacSource] ?? k.apacSource}
                 </td>
-                <td className="px-4 py-3 text-xs text-muted">
+                <td className="px-3 py-2 text-xs text-muted">
                   {k.education ?? "—"}
                 </td>
-                <td className="px-4 py-3 text-xs text-muted">
+                <td className="px-3 py-2 text-xs text-muted">
                   {k.educationLevel ?? "—"}
                 </td>
-                <td className="px-4 py-3 text-xs text-muted">
+                <td className="px-3 py-2 text-xs text-muted">
                   {k.educationName ?? "—"}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2">
                   <button
                     onClick={() => setSelected(k)}
                     className="rounded-lg px-3 py-1 text-xs font-medium text-smaragd hover:bg-smaragd/10"
@@ -253,7 +253,7 @@ function Th({
   return (
     <th
       onClick={onClick}
-      className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted ${
+      className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted ${
         onClick ? "cursor-pointer select-none hover:text-heading" : ""
       }`}
     >
