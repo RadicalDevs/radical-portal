@@ -134,7 +134,7 @@ export default function CandidatesClient({
               <Th onClick={() => toggleSort("gecombineerd")}>
                 Score <SortIcon col="gecombineerd" />
               </Th>
-              <Th>A / P / A / C</Th>
+              <Th>APAC scores</Th>
               <Th onClick={() => toggleSort("poolStatus")}>
                 Status <SortIcon col="poolStatus" />
               </Th>
@@ -167,17 +167,31 @@ export default function CandidatesClient({
                 </td>
                 <td className="px-4 py-3">
                   {k.gecombineerd !== null ? (
-                    <span className="font-semibold text-smaragd">
+                    <span className="text-lg font-bold text-smaragd leading-none">
                       {k.gecombineerd.toFixed(1)}
                     </span>
                   ) : (
                     <span className="text-muted">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-muted">
-                  {k.adaptability !== null
-                    ? `${k.adaptability} / ${k.personality} / ${k.awareness} / ${k.connection}`
-                    : "—"}
+                <td className="px-4 py-3">
+                  {k.adaptability !== null ? (
+                    <div className="flex gap-1">
+                      {([
+                        { val: k.adaptability, color: "#2ed573", label: "A" },
+                        { val: k.personality,  color: "#E6734F", label: "P" },
+                        { val: k.awareness,    color: "#3B82F6", label: "A" },
+                        { val: k.connection,   color: "#8B5CF6", label: "C" },
+                      ] as const).map((d, i) => (
+                        <div key={i} className="flex flex-col items-center rounded-md px-1.5 py-1 bg-surface-light min-w-[32px]">
+                          <span className="text-[9px] font-semibold uppercase" style={{ color: d.color }}>{d.label}</span>
+                          <span className="text-xs font-bold text-heading leading-tight">{d.val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span
