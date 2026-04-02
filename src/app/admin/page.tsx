@@ -128,6 +128,25 @@ export default async function AdminHomePage() {
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      {(() => {
+                        const cfg: Record<string, { label: string; cls: string }> = {
+                          notitie:       { label: "Notitie",      cls: "bg-surface-light text-muted" },
+                          apac:          { label: "APAC",         cls: "bg-smaragd/10 text-smaragd" },
+                          email:         { label: "E-mail",       cls: "bg-blue-500/10 text-blue-400" },
+                          telefoon:      { label: "Telefoon",     cls: "bg-purple-500/10 text-purple-400" },
+                          whatsapp:      { label: "WhatsApp",     cls: "bg-green-500/10 text-green-400" },
+                          afspraak:      { label: "Afspraak",     cls: "bg-coral/10 text-coral" },
+                          statuswijziging: { label: "Status",     cls: "bg-yellow-500/10 text-yellow-400" },
+                        };
+                        const c = cfg[item.type] ?? { label: item.type, cls: "bg-surface-light text-muted" };
+                        return (
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${c.cls}`}>
+                            {c.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <p className="line-clamp-2 text-sm text-body">
                       {item.beschrijving}
                     </p>

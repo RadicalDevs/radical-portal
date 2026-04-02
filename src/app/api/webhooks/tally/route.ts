@@ -283,7 +283,7 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
 
   // --- Activiteit loggen ---
   await supabase.from("activiteiten").insert({
-    type: "notitie",
+    type: "apac",
     beschrijving: `APAC-test voltooid via Tally. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}.`,
     kandidaat_id: kandidaatId,
     metadata: { scores, bron: "tally", poort: poortDecision, tallyResponseId: payload.data.responseId },

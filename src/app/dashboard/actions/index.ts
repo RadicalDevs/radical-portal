@@ -49,6 +49,11 @@ export interface Article {
 }
 
 // ---------------------------------------------------------------------------
+// Demo override — always shows "no results yet" for this email
+// ---------------------------------------------------------------------------
+const DEMO_RESET_EMAIL = "vpz1997@gmail.com";
+
+// ---------------------------------------------------------------------------
 // 1. Get dashboard data (user + kandidaat + latest APAC scores)
 // ---------------------------------------------------------------------------
 
@@ -121,6 +126,8 @@ export async function getDashboardData(): Promise<DashboardData | null> {
     (!onboardedAt ||
       Date.now() - new Date(onboardedAt).getTime() < 5 * 60 * 1000);
 
+  const isDemo = portalUser.email === DEMO_RESET_EMAIL;
+
   return {
     user: {
       firstName: portalUser.first_name ?? "",
@@ -135,7 +142,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       isFirstLogin,
     },
     scores,
-    scoreRevealed: portalUser.score_revealed ?? false,
+    scoreRevealed: isDemo ? false : (portalUser.score_revealed ?? false),
   };
 }
 

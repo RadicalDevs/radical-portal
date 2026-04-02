@@ -117,9 +117,9 @@ export default function InteractiveRadarDemo() {
                   transition: "background 0.6s ease",
                 }}
               />
-              <div className="relative h-[320px] w-[320px] sm:h-[380px] sm:w-[380px]">
+              <div className="relative h-[320px] w-[320px] sm:h-[380px] sm:w-[380px] [&_svg]:overflow-visible [&_svg]:outline-none [&_.recharts-wrapper]:outline-none [&_*:focus]:outline-none">
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
+                  <RadarChart cx="50%" cy="50%" outerRadius="55%" data={chartData}>
                     <PolarGrid
                       stroke="var(--bg-surface-border)"
                       strokeDasharray="3 3"

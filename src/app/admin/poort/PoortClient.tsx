@@ -80,21 +80,23 @@ export default function PoortClient({ data }: { data: PoortPageData }) {
             </p>
           </div>
         </div>
-        <button
-          onClick={handleToggle}
-          disabled={isPendingToggle}
-          className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-all disabled:opacity-50 ${
-            fase === "learning"
-              ? "bg-coral/10 text-coral hover:bg-coral/20"
-              : "bg-smaragd/10 text-smaragd hover:bg-smaragd/20"
-          }`}
-        >
-          {isPendingToggle
-            ? "Wisselen…"
-            : fase === "learning"
-            ? "Activeer fase →"
-            : "← Terug naar leerfase"}
-        </button>
+        {(fase === "active" || teller >= drempel) && (
+          <button
+            onClick={handleToggle}
+            disabled={isPendingToggle}
+            className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-all disabled:opacity-50 ${
+              fase === "learning"
+                ? "bg-coral/10 text-coral hover:bg-coral/20"
+                : "bg-smaragd/10 text-smaragd hover:bg-smaragd/20"
+            }`}
+          >
+            {isPendingToggle
+              ? "Wisselen…"
+              : fase === "learning"
+              ? "Activeer actieve fase →"
+              : "← Terug naar leerfase"}
+          </button>
+        )}
       </div>
 
       {/* Counter */}

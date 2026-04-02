@@ -15,8 +15,8 @@ export default function ParticleNetwork() {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const isMobile = window.innerWidth < 768;
-    const COUNT = isMobile ? 1200 : 4000;
-    const CONNECT = isMobile ? 22 : 26;
+    const COUNT = isMobile ? 2800 : 8000;
+    const CONNECT = isMobile ? 26 : 30;
 
     let w = 0, h = 0;
 
@@ -104,8 +104,8 @@ export default function ParticleNetwork() {
       ctx!.clearRect(0, 0, w, h);
 
       const m = mouseRef.current;
-      m.x += (m.tx - m.x) * 0.02;
-      m.y += (m.ty - m.y) * 0.02;
+      m.x += (m.tx - m.x) * 0.04;
+      m.y += (m.ty - m.y) * 0.04;
 
       // Update
       for (let i = 0; i < COUNT; i++) {
@@ -122,7 +122,7 @@ export default function ParticleNetwork() {
         // Gentle push away, not attraction. Creates a ripple, not a magnet.
         const mdx = m.x - px[i], mdy = m.y - py[i];
         const md = Math.sqrt(mdx * mdx + mdy * mdy);
-        if (md < 0.08 && md > 0.001 && z > 0.25) {
+        if (md < 0.05 && md > 0.001 && z > 0.25) {
           const norm = (1 - md / 0.08) * z * 0.3;
           // Push away gently
           pvx[i] -= mdx / md * 0.004 * norm;
@@ -196,7 +196,7 @@ export default function ParticleNetwork() {
               const midX = (sxBuf[i] + sxBuf[j]) / 2;
               const midY = (syBuf[i] + syBuf[j]) / 2;
               const mDist = Math.hypot(msx - midX, msy - midY);
-              if (mDist < 100) alpha += (1 - mDist / 100) * 0.2;
+              if (mDist < 150) alpha += (1 - mDist / 150) * 0.45;
 
               alpha = Math.min(alpha, 0.45);
               if (alpha < 0.005) continue;
@@ -229,15 +229,15 @@ export default function ParticleNetwork() {
 
         let mp = 0;
         const mDist = Math.hypot(msx - sxBuf[i], msy - syBuf[i]);
-        if (mDist < 90 + z * 40) mp = 1 - mDist / (90 + z * 40);
+        if (mDist < 130 + z * 60) mp = 1 - mDist / (130 + z * 60);
 
         // SIZE: extreme range
         // z=0: ~0.3px (dust), z=0.3: ~1px, z=0.6: ~3px, z=1: ~6px
-        const s = psize[i] * (0.3 + z * z * z * 8) * (0.95 + pulse * 0.05 + mp * 0.5);
+        const s = psize[i] * (0.3 + z * z * z * 8) * (0.95 + pulse * 0.05 + mp * 1.0);
 
         // ALPHA: dramatic range
         // z=0: 0.03 (barely visible dust), z=0.5: 0.25, z=1: 0.85
-        const a = (0.025 + z * z * 0.85) * (0.9 + pulse * 0.1 + mp * 1.5);
+        const a = (0.025 + z * z * 0.85) * (0.9 + pulse * 0.1 + mp * 2.5);
 
         const isAI = ptype[i] === 0;
         const cr = isAI ? "46,213,115" : "230,115,79";

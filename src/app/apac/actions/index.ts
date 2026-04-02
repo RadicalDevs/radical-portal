@@ -398,7 +398,7 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
 
   // 4. Log in activiteiten (CRM ziet dit in kandidaat-detail)
   await supabase.from("activiteiten").insert({
-    type: "notitie",
+    type: "apac",
     beschrijving: `APAC-test voltooid via portal. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}. De Poort: ${poortDecision.leerfase ? "leerfase" : "actieve fase"}.`,
     kandidaat_id: kandidaatId,
     metadata: { scores, b5Scores, bron: "portal", poort: poortDecision },

@@ -89,7 +89,7 @@ export default function Navigation() {
         {/* Desktop nav links (hidden on mobile) */}
         <div className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => {
-            const isActive = pathname === link.href || (link.href !== "/admin" && pathname.startsWith(link.href + "/"));
+            const isActive = pathname === link.href || (link.href !== "/admin" && link.href !== "/dashboard" && pathname.startsWith(link.href + "/"));
             return (
               <Link
                 key={link.href}
@@ -162,7 +162,7 @@ export default function Navigation() {
         <div className="border-t border-surface-border/60 bg-surface/95 backdrop-blur-md md:hidden">
           <div className="space-y-1 px-4 py-3">
             {navLinks.map((link) => {
-              const isActive = pathname === link.href || (link.href !== "/admin" && pathname.startsWith(link.href + "/"));
+              const isActive = pathname === link.href || (link.href !== "/admin" && link.href !== "/dashboard" && pathname.startsWith(link.href + "/"));
               return (
                 <Link
                   key={link.href}

@@ -108,8 +108,9 @@ export default function RadarChart({
         }}
       />
 
+      <div className="h-full w-full [&_svg]:overflow-visible">
       <ResponsiveContainer width="100%" height="100%">
-        <RechartsRadarChart cx="50%" cy="50%" outerRadius="72%" data={data}>
+        <RechartsRadarChart cx="50%" cy="50%" outerRadius="52%" data={data}>
           <PolarGrid
             stroke="var(--bg-surface-border)"
             strokeDasharray="3 3"
@@ -158,6 +159,7 @@ export default function RadarChart({
           </defs>
         </RechartsRadarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }
