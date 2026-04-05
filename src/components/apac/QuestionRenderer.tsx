@@ -5,8 +5,6 @@
  *
  * Rendert een enkele APAC-vraag met multiple-choice opties.
  * Vragen worden dynamisch geladen uit de apac_questions tabel.
- *
- * TODO: Implementeer volledig in volgende fase
  */
 
 interface QuestionOption {

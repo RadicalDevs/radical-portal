@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
-import type { ApacDimension, ApacFormConfig } from "@/lib/apac/types";
+import type { ApacDimension, ApacFormConfig, ApacMaxScores } from "@/lib/apac/types";
+import { calculateMaxScores } from "@/lib/apac/scoring";
 
 // ---------------------------------------------------------------------------
 // Shared types (Question Analytics)
@@ -39,6 +40,15 @@ export interface QuestionAnalyticsItem {
 // Shared types
 // ---------------------------------------------------------------------------
 
+export interface RecentDeal {
+  id: string;
+  pipelineType: string;
+  stage: string;
+  klantNaam: string;
+  potentieleOmzet: number | null;
+  createdAt: string;
+}
+
 export interface AdminKpiData {
   totalKandidaten: number;
   apacThisWeek: number;
@@ -48,6 +58,13 @@ export interface AdminKpiData {
   poortTeller: number;
   poortDrempel: number;
   recenteActiviteit: RecentActivity[];
+  // CRM KPIs
+  omzetMaand: number;
+  omzetTotaal: number;
+  pipelineWaarde: number;
+  openVacatures: number;
+  openstaandeTaken: number;
+  recenteDeals: RecentDeal[];
 }
 
 export interface RecentActivity {
@@ -82,6 +99,8 @@ export interface AdminKandidaat {
   tags: string[];
   beschikbaarheid: boolean | null;
   notities: string | null;
+  vetoGetriggerd: boolean;
+  vetoDetails: { question_id: string; question_text: string; answer_value: number; answer_label: string }[];
 }
 
 export interface PoortPageData {
@@ -118,11 +137,12 @@ export interface HistogramBin {
 export interface AdminApacQuestion {
   id: string;
   question_text: string;
-  options: { label: string; value: number }[];
+  options: { label: string; value: number; is_veto_fout?: boolean }[];
   variable: string;
   weight: number;
   sort_order: number;
   is_active: boolean;
+  is_veto: boolean;
   tally_field_id: string | null;
 }
 
@@ -136,6 +156,7 @@ export async function getAdminKpis(): Promise<AdminKpiData> {
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   const [
     { count: totalKandidaten },
@@ -145,6 +166,12 @@ export async function getAdminKpis(): Promise<AdminKpiData> {
     { data: poortConfig },
     { count: poortTeller },
     { data: activiteiten },
+    { data: facturenMaand },
+    { data: facturenTotaal },
+    { data: activeDeals },
+    { count: openVacatures },
+    { count: openstaandeTaken },
+    { data: recenteDealsRaw },
   ] = await Promise.all([
     db.from("kandidaten").select("*", { count: "exact", head: true }),
     db
@@ -176,6 +203,33 @@ export async function getAdminKpis(): Promise<AdminKpiData> {
       .select("id, type, beschrijving, kandidaat_id, created_at")
       .order("created_at", { ascending: false })
       .limit(8),
+    db
+      .from("facturen")
+      .select("totaal_bedrag")
+      .eq("status", "betaald")
+      .gte("betaaldatum", startOfMonth),
+    db
+      .from("facturen")
+      .select("totaal_bedrag")
+      .eq("status", "betaald"),
+    db
+      .from("deals")
+      .select("potentiele_omzet")
+      .eq("is_lost", false),
+    db
+      .from("vacatures")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "open"),
+    db
+      .from("taken")
+      .select("*", { count: "exact", head: true })
+      .neq("status", "afgerond"),
+    db
+      .from("deals")
+      .select("id, pipeline_type, stage, potentiele_omzet, klant_id, created_at")
+      .eq("is_lost", false)
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   // Enrich activity with kandidaat names
@@ -206,6 +260,42 @@ export async function getAdminKpis(): Promise<AdminKpiData> {
     }
   }
 
+  // CRM: compute aggregated values
+  const omzetMaand = (facturenMaand ?? []).reduce(
+    (sum, f) => sum + (f.totaal_bedrag ?? 0),
+    0
+  );
+  const omzetTotaal = (facturenTotaal ?? []).reduce(
+    (sum, f) => sum + (f.totaal_bedrag ?? 0),
+    0
+  );
+  const pipelineWaarde = (activeDeals ?? []).reduce(
+    (sum, d) => sum + (d.potentiele_omzet ?? 0),
+    0
+  );
+
+  // Enrich recent deals with klant names
+  const recenteDeals: RecentDeal[] = [];
+  if (recenteDealsRaw && recenteDealsRaw.length > 0) {
+    const klantIds = [...new Set(recenteDealsRaw.map((d) => d.klant_id).filter(Boolean))];
+    const { data: klanten } = klantIds.length
+      ? await db.from("klanten").select("id, bedrijfsnaam").in("id", klantIds)
+      : { data: [] };
+    const klantMap = Object.fromEntries(
+      (klanten ?? []).map((k) => [k.id, k.bedrijfsnaam])
+    );
+    for (const d of recenteDealsRaw) {
+      recenteDeals.push({
+        id: d.id,
+        pipelineType: d.pipeline_type,
+        stage: d.stage,
+        klantNaam: klantMap[d.klant_id] ?? "—",
+        potentieleOmzet: d.potentiele_omzet ?? null,
+        createdAt: d.created_at,
+      });
+    }
+  }
+
   return {
     totalKandidaten: totalKandidaten ?? 0,
     apacThisWeek: apacThisWeek ?? 0,
@@ -215,6 +305,12 @@ export async function getAdminKpis(): Promise<AdminKpiData> {
     poortTeller: poortTeller ?? 0,
     poortDrempel: poortConfig?.kandidaat_drempel ?? 150,
     recenteActiviteit,
+    omzetMaand,
+    omzetTotaal,
+    pipelineWaarde,
+    openVacatures: openVacatures ?? 0,
+    openstaandeTaken: openstaandeTaken ?? 0,
+    recenteDeals,
   };
 }
 
@@ -229,12 +325,14 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
     db
       .from("kandidaten")
       .select("id, voornaam, achternaam, email, telefoon, linkedin_url, pool_status, apac_source, created_at, education, education_level, education_name, cv_url")
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(500),
     db
       .from("apac_resultaten")
-      .select("kandidaat_id, adaptability, personality, awareness, connection, created_at")
+      .select("kandidaat_id, adaptability, personality, awareness, connection, created_at, veto_getriggerd, veto_details")
       .eq("is_seed", false)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(1000),
   ]);
 
   if (error) {
@@ -259,7 +357,7 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
     const c = apac !== null ? Number(apac.connection) : null;
     const gecombineerd =
       a !== null && p !== null && aw !== null && c !== null
-        ? Math.round(((a + p + aw + c) / 4) * 10) / 10
+        ? Math.round((a + p + aw + c) * 10) / 10
         : null;
 
     return {
@@ -286,8 +384,27 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
       tags: [],
       beschikbaarheid: null,
       notities: null,
+      vetoGetriggerd: (apac as Record<string, unknown>)?.veto_getriggerd === true,
+      vetoDetails: ((apac as Record<string, unknown>)?.veto_details ?? []) as AdminKandidaat["vetoDetails"],
     };
   });
+}
+
+/** Get max scores per APAC dimension from active questions */
+export async function getApacMaxScores(): Promise<ApacMaxScores> {
+  const db = createServiceClient();
+  const { data: questions } = await db
+    .from("apac_questions")
+    .select("variable, options, weight")
+    .eq("is_active", true);
+
+  return calculateMaxScores(
+    (questions ?? []).map((q) => ({
+      variable: q.variable,
+      options: (q.options as { value: number }[]) ?? [],
+      weight: q.weight ?? 1,
+    }))
+  );
 }
 
 // Fetch full details for detail modal (lazy load)
@@ -318,10 +435,10 @@ const ImportKandidaatSchema = z.object({
   voornaam: z.string().min(1, "Voornaam is verplicht").max(100),
   achternaam: z.string().max(100).default(""),
   email: z.string().email("Ongeldig e-mailadres"),
-  adaptability: z.coerce.number().min(0).max(10),
-  personality: z.coerce.number().min(0).max(10),
-  awareness: z.coerce.number().min(0).max(10),
-  connection: z.coerce.number().min(0).max(10),
+  adaptability: z.coerce.number().min(0).max(50),
+  personality: z.coerce.number().min(0).max(50),
+  awareness: z.coerce.number().min(0).max(50),
+  connection: z.coerce.number().min(0).max(50),
   datum: z.string().optional(),
 });
 
@@ -587,11 +704,11 @@ export async function getPoortPageData(): Promise<PoortPageData> {
 // ---------------------------------------------------------------------------
 
 const PoortConfigSchema = z.object({
-  drempel_adaptability: z.coerce.number().min(0).max(10).nullable(),
-  drempel_personality: z.coerce.number().min(0).max(10).nullable(),
-  drempel_awareness: z.coerce.number().min(0).max(10).nullable(),
-  drempel_connection: z.coerce.number().min(0).max(10).nullable(),
-  drempel_gecombineerd: z.coerce.number().min(0).max(10).nullable(),
+  drempel_adaptability: z.coerce.number().min(0).max(50).nullable(),
+  drempel_personality: z.coerce.number().min(0).max(50).nullable(),
+  drempel_awareness: z.coerce.number().min(0).max(50).nullable(),
+  drempel_connection: z.coerce.number().min(0).max(50).nullable(),
+  drempel_gecombineerd: z.coerce.number().min(0).max(200).nullable(),
 });
 
 export type UpdatePoortResult =
@@ -645,7 +762,7 @@ export async function getAdminApacQuestions(): Promise<AdminApacQuestion[]> {
   const db = createServiceClient();
   const { data, error } = await db
     .from("apac_questions")
-    .select("id, question_text, options, variable, weight, sort_order, is_active, tally_field_id")
+    .select("id, question_text, options, variable, weight, sort_order, is_active, is_veto, tally_field_id")
     .order("sort_order", { ascending: true });
 
   if (error) {
@@ -660,10 +777,11 @@ const QuestionSchema = z.object({
   variable: z.string().min(1),
   weight: z.coerce.number().min(0.1).max(5).default(1),
   is_active: z.boolean().default(true),
+  is_veto: z.boolean().default(false),
   tally_field_id: z.string().max(200).nullable().optional(),
   options: z.string().transform((val, ctx) => {
     try {
-      return JSON.parse(val) as { label: string; value: number }[];
+      return JSON.parse(val) as { label: string; value: number; is_veto_fout?: boolean }[];
     } catch {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Ongeldige opties JSON" });
       return z.NEVER;
@@ -685,6 +803,7 @@ export async function updateApacQuestion(
     variable: formData.get("variable"),
     weight: formData.get("weight"),
     is_active: formData.get("is_active") === "true",
+    is_veto: formData.get("is_veto") === "true",
     tally_field_id: tallyRaw && String(tallyRaw).trim() ? String(tallyRaw).trim() : null,
     options: formData.get("options"),
   });
@@ -717,6 +836,7 @@ export async function addApacQuestion(
     variable: formData.get("variable"),
     weight: formData.get("weight"),
     is_active: true,
+    is_veto: formData.get("is_veto") === "true",
     tally_field_id: tallyRaw && String(tallyRaw).trim() ? String(tallyRaw).trim() : null,
     options: formData.get("options"),
   });
@@ -1106,6 +1226,7 @@ export interface AnalyticsData {
   };
   weeklyInstroom: WeeklyInstroomRow[];
   poolStatusVerdeling: PoolStatusRow[];
+  maxScores: ApacMaxScores;
   hasData: boolean;
 }
 
@@ -1124,16 +1245,18 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     populatieRadar: { adaptability: 0, personality: 0, awareness: 0, connection: 0 },
     weeklyInstroom: [],
     poolStatusVerdeling: [],
+    maxScores: { adaptability: 0, personality: 0, awareness: 0, connection: 0 },
     hasData: false,
   };
 
-  const [{ data: apacRows, error: apacErr }, { data: kandidatenRows, error: kErr }] =
+  const [{ data: apacRows, error: apacErr }, { data: kandidatenRows, error: kErr }, { data: questionRows }] =
     await Promise.all([
       db
         .from("apac_resultaten")
         .select("kandidaat_id, adaptability, personality, awareness, connection, created_at")
         .eq("is_seed", false),
       db.from("kandidaten").select("id, pool_status, education_level"),
+      db.from("apac_questions").select("variable, options, weight").eq("is_active", true),
     ]);
 
   if (apacErr) console.error("[getAnalyticsData] apac error:", apacErr);
@@ -1141,8 +1264,15 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
 
   const apac = apacRows ?? [];
   const kandidaten = kandidatenRows ?? [];
+  const maxScores = calculateMaxScores(
+    (questionRows ?? []).map((q) => ({
+      variable: q.variable as string,
+      options: (q.options as { value: number }[]) ?? [],
+      weight: (q.weight as number) ?? 1,
+    }))
+  );
 
-  if (apac.length === 0) return empty;
+  if (apac.length === 0) return { ...empty, maxScores };
 
   // Lookup map: kandidaat_id → kandidaat row
   const kMap = new Map(kandidaten.map((k) => [k.id, k]));
@@ -1153,7 +1283,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     const p = Number(r.personality);
     const aw = Number(r.awareness);
     const c = Number(r.connection);
-    return { ...r, a, p, aw, c, gecombineerd: (a + p + aw + c) / 4 };
+    return { ...r, a, p, aw, c, gecombineerd: a + p + aw + c };
   });
 
   // --- KPIs ---
@@ -1237,6 +1367,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     populatieRadar: gemiddeldePerDimensie,
     weeklyInstroom,
     poolStatusVerdeling,
+    maxScores,
     hasData: true,
   };
 }
@@ -1244,6 +1375,409 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
 // ---------------------------------------------------------------------------
 // Admin: Get CV download URL for a specific candidate
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Profiel update
+// ---------------------------------------------------------------------------
+
+const UpdateProfielSchema = z.object({
+  voornaam: z.string().min(1).max(100),
+  achternaam: z.string().max(100).default(""),
+  email: z.string().email().optional().or(z.literal("")),
+  telefoon: z.string().max(30).optional().or(z.literal("")),
+  linkedin_url: z.string().url().optional().or(z.literal("")),
+  pool_status: z.string().optional(),
+  beschikbaarheid: z.boolean().optional(),
+  vaardigheden: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  notities: z.string().max(5000).optional().or(z.literal("")),
+  reden_afwijzing: z.string().max(2000).optional().or(z.literal("")),
+});
+
+export async function updateKandidaatProfiel(
+  id: string,
+  updates: z.infer<typeof UpdateProfielSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const parsed = UpdateProfielSchema.safeParse(updates);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const db = createServiceClient();
+  const { voornaam, achternaam, email, telefoon, linkedin_url, pool_status, beschikbaarheid, vaardigheden, tags, notities, reden_afwijzing } = parsed.data;
+
+  const patch: Record<string, unknown> = { voornaam, achternaam };
+  if (email !== undefined) patch.email = email || null;
+  if (telefoon !== undefined) patch.telefoon = telefoon || null;
+  if (linkedin_url !== undefined) patch.linkedin_url = linkedin_url || null;
+  if (pool_status !== undefined) patch.pool_status = pool_status;
+  if (beschikbaarheid !== undefined) patch.beschikbaarheid = beschikbaarheid;
+  if (vaardigheden !== undefined) patch.vaardigheden = vaardigheden;
+  if (tags !== undefined) patch.tags = tags;
+  if (notities !== undefined) patch.notities = notities || null;
+  if (pool_status === "afgewezen" && reden_afwijzing !== undefined) {
+    patch.reden_afwijzing = reden_afwijzing || null;
+  } else if (pool_status && pool_status !== "afgewezen") {
+    patch.reden_afwijzing = null;
+  }
+
+  const { error } = await db.from("kandidaten").update(patch).eq("id", id);
+
+  if (error) {
+    console.error("[updateKandidaatProfiel]", error);
+    return { success: false, error: "Kon profiel niet opslaan." };
+  }
+
+  revalidatePath("/admin/candidates");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Activiteiten
+// ---------------------------------------------------------------------------
+
+export interface KandidaatActiviteit {
+  id: string;
+  type: string;
+  beschrijving: string;
+  createdAt: string;
+}
+
+export async function getKandidaatActiviteiten(
+  kandidaatId: string
+): Promise<KandidaatActiviteit[]> {
+  const db = createServiceClient();
+  const { data } = await db
+    .from("activiteiten")
+    .select("id, type, beschrijving, created_at")
+    .eq("kandidaat_id", kandidaatId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  return (data || []).map((a) => ({
+    id: a.id as string,
+    type: a.type as string,
+    beschrijving: a.beschrijving as string,
+    createdAt: a.created_at as string,
+  }));
+}
+
+// ── Snel notitie toevoegen voor kandidaat ─────────────────────────────────
+
+export async function addKandidaatNotitie(
+  kandidaatId: string,
+  tekst: string
+): Promise<{ error?: string }> {
+  if (!tekst.trim()) return { error: "Notitie mag niet leeg zijn." };
+
+  const db = createServiceClient();
+  const { data: { user } } = await db.auth.getUser();
+
+  const { error } = await db.from("activiteiten").insert({
+    type: "notitie",
+    beschrijving: tekst.trim(),
+    kandidaat_id: kandidaatId,
+    user_id: user?.id ?? null,
+  });
+
+  if (error) return { error: error.message };
+  return {};
+}
+
+// ── Email versturen aan kandidaat ──────────────────────────────────────────
+
+export async function sendKandidaatEmail(
+  kandidaatId: string,
+  to: string,
+  subject: string,
+  body: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!to || !subject || !body) {
+    return { success: false, error: "Ontvanger, onderwerp en bericht zijn verplicht." };
+  }
+
+  const { sendEmail } = await import("@/lib/email");
+
+  const escapedBody = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const html = `<div style="font-family:Inter,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto">
+    <div style="background:linear-gradient(135deg,#0D0D14 0%,#13131F 100%);padding:20px 28px;border-radius:8px 8px 0 0">
+      <h2 style="color:#2ed573;margin:0;font-size:18px;font-weight:700">Radical Portal</h2>
+    </div>
+    <div style="padding:24px 28px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
+      <div style="white-space:pre-wrap;font-size:14px;color:#374151;line-height:1.7">${escapedBody}</div>
+      <hr style="border:none;border-top:1px solid #eee;margin:24px 0 12px">
+      <p style="color:#aaa;font-size:11px;margin:0">Radical Portal — radicalportal.nl</p>
+    </div>
+  </div>`;
+
+  const ok = await sendEmail({ to, subject, html, text: body });
+  if (!ok) return { success: false, error: "E-mail kon niet worden verstuurd. Controleer SMTP-instellingen." };
+
+  const db = createServiceClient();
+  await db.from("activiteiten").insert({
+    kandidaat_id: kandidaatId,
+    type: "email",
+    beschrijving: `E-mail verstuurd: "${subject}"`,
+  }).then(undefined, () => {});
+
+  return { success: true };
+}
+
+// ── APAC scores handmatig aanpassen ────────────────────────────────────────
+
+const UpdateApacScoresSchema = z.object({
+  adaptability: z.number().min(0).max(9999),
+  personality:  z.number().min(0).max(9999),
+  awareness:    z.number().min(0).max(9999),
+  connection:   z.number().min(0).max(9999),
+});
+
+export async function updateApacScores(
+  kandidaatId: string,
+  data: {
+    adaptability: number;
+    personality: number;
+    awareness: number;
+    connection: number;
+  }
+): Promise<{ success: boolean; gecombineerd?: number; error?: string }> {
+  const parsed = UpdateApacScoresSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Ongeldige scores." };
+
+  const gecombineerd =
+    parsed.data.adaptability +
+    parsed.data.personality +
+    parsed.data.awareness +
+    parsed.data.connection;
+
+  const db = createServiceClient();
+  const { error } = await db
+    .from("apac_resultaten")
+    .upsert(
+      {
+        kandidaat_id: kandidaatId,
+        adaptability: parsed.data.adaptability,
+        personality:  parsed.data.personality,
+        awareness:    parsed.data.awareness,
+        connection:   parsed.data.connection,
+        gecombineerd,
+        bron: "manual",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "kandidaat_id" }
+    );
+
+  if (error) {
+    console.error("[updateApacScores]", error);
+    return { success: false, error: "Kon scores niet opslaan." };
+  }
+
+  await db.from("activiteiten").insert({
+    kandidaat_id: kandidaatId,
+    type: "apac_update",
+    beschrijving: `APAC scores handmatig bijgewerkt (Totaal: ${gecombineerd})`,
+  }).then(undefined, () => {});
+
+  revalidatePath("/admin/candidates");
+  return { success: true, gecombineerd };
+}
+
+// ── AVG Toestemmingen ───────────────────────────────────────────────────────
+
+export interface AvgToestemming {
+  id: string;
+  type: string;
+  toegestaan: boolean;
+  gegevenOp: string | null;
+  verlooptOp: string | null;
+  ingetrokkenOp: string | null;
+}
+
+const AVG_TOESTEMMING_LABELS: Record<string, string> = {
+  data_verwerking:       "Gegevensverwerking",
+  cv_opslag:             "CV Opslag",
+  communicatie_email:    "Email Communicatie",
+  communicatie_whatsapp: "WhatsApp Communicatie",
+  delen_met_klanten:     "Delen met Klanten",
+  profiling:             "Profiling & AI Analyse",
+};
+
+export async function getAvgToestemmingen(
+  kandidaatId: string
+): Promise<AvgToestemming[]> {
+  const db = createServiceClient();
+  const { data } = await db
+    .from("avg_toestemmingen")
+    .select("id, type, toegestaan, gegeven_op, verloopt_op, ingetrokken_op")
+    .eq("kandidaat_id", kandidaatId);
+
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    type: r.type,
+    toegestaan: r.toegestaan,
+    gegevenOp: r.gegeven_op ?? null,
+    verlooptOp: r.verloopt_op ?? null,
+    ingetrokkenOp: r.ingetrokken_op ?? null,
+  }));
+}
+
+export async function toggleAvgToestemming(
+  kandidaatId: string,
+  type: string,
+  toegestaan: boolean,
+  existingId?: string
+): Promise<{ success: boolean; error?: string }> {
+  const db = createServiceClient();
+  const now = new Date().toISOString();
+
+  if (existingId) {
+    const { error } = await db
+      .from("avg_toestemmingen")
+      .update({
+        toegestaan,
+        gegeven_op: toegestaan ? now : undefined,
+        ingetrokken_op: !toegestaan ? now : null,
+      })
+      .eq("id", existingId);
+    if (error) return { success: false, error: error.message };
+  } else {
+    const { error } = await db.from("avg_toestemmingen").insert({
+      kandidaat_id: kandidaatId,
+      type,
+      toegestaan,
+      gegeven_op: toegestaan ? now : null,
+      bron: "handmatig",
+    });
+    if (error) return { success: false, error: error.message };
+  }
+
+  await db.from("activiteiten").insert({
+    kandidaat_id: kandidaatId,
+    type: "avg",
+    beschrijving: `AVG toestemming "${type}" ${toegestaan ? "gegeven" : "ingetrokken"}`,
+  }).then(undefined, () => {});
+
+  return { success: true };
+}
+
+// ── Pipeline / Plaatsingen ──────────────────────────────────────────────────
+
+export interface KandidaatPlaatsing {
+  id: string;
+  status: string;
+  createdAt: string;
+  vacatureTitel: string | null;
+  pipelineType: string | null;
+  dealStage: string | null;
+}
+
+export async function getKandidaatPlaatsingen(
+  kandidaatId: string
+): Promise<KandidaatPlaatsing[]> {
+  const db = createServiceClient();
+  const { data } = await db
+    .from("kandidaat_plaatsingen")
+    .select(`
+      id, status, created_at,
+      vacature:vacatures(functietitel),
+      deal:deals(stage, pipeline_type)
+    `)
+    .eq("kandidaat_id", kandidaatId)
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map((r) => {
+    const vac = Array.isArray(r.vacature) ? r.vacature[0] : r.vacature;
+    const deal = Array.isArray(r.deal) ? r.deal[0] : r.deal;
+    return {
+      id: r.id,
+      status: r.status ?? "—",
+      createdAt: r.created_at,
+      vacatureTitel: (vac as { functietitel?: string } | null)?.functietitel ?? null,
+      pipelineType: (deal as { pipeline_type?: string } | null)?.pipeline_type ?? null,
+      dealStage: (deal as { stage?: string } | null)?.stage ?? null,
+    };
+  });
+}
+
+// ── Admin CV Upload / Delete ────────────────────────────────────────────────
+
+const ALLOWED_CV_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+const MAX_CV_SIZE = 10 * 1024 * 1024; // 10 MB
+
+export async function adminUploadCv(
+  kandidaatId: string,
+  formData: FormData
+): Promise<{ success: boolean; cvUrl?: string; error?: string }> {
+  const file = formData.get("cv") as File | null;
+  if (!file || file.size === 0) return { success: false, error: "Geen bestand ontvangen." };
+  if (file.size > MAX_CV_SIZE) return { success: false, error: "Bestand is te groot (max 10 MB)." };
+  if (!ALLOWED_CV_TYPES.includes(file.type)) {
+    return { success: false, error: "Alleen PDF en Word-bestanden zijn toegestaan." };
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+  const storagePath = `${kandidaatId}/cv.${ext}`;
+
+  const db = createServiceClient();
+
+  const { error: uploadError } = await db.storage
+    .from("cv-uploads")
+    .upload(storagePath, file, { upsert: true, contentType: file.type });
+
+  if (uploadError) {
+    console.error("[adminUploadCv] storage:", uploadError);
+    return { success: false, error: "Upload mislukt." };
+  }
+
+  const { error: dbError } = await db
+    .from("kandidaten")
+    .update({ cv_url: storagePath })
+    .eq("id", kandidaatId);
+
+  if (dbError) {
+    console.error("[adminUploadCv] db:", dbError);
+    return { success: false, error: "CV geüpload maar opslaan mislukt." };
+  }
+
+  await db.from("activiteiten").insert({
+    kandidaat_id: kandidaatId,
+    type: "cv_upload",
+    beschrijving: "CV geüpload door admin",
+  }).then(undefined, () => {});
+
+  revalidatePath("/admin/candidates");
+  return { success: true, cvUrl: storagePath };
+}
+
+export async function adminDeleteCv(
+  kandidaatId: string
+): Promise<{ success: boolean; error?: string }> {
+  const db = createServiceClient();
+
+  const { data: k } = await db
+    .from("kandidaten")
+    .select("cv_url")
+    .eq("id", kandidaatId)
+    .single();
+
+  if (k?.cv_url) {
+    await db.storage.from("cv-uploads").remove([k.cv_url]).catch(() => {});
+  }
+
+  const { error } = await db
+    .from("kandidaten")
+    .update({ cv_url: null })
+    .eq("id", kandidaatId);
+
+  if (error) return { success: false, error: "Kon CV niet verwijderen." };
+
+  revalidatePath("/admin/candidates");
+  return { success: true };
+}
 
 export async function getAdminCvDownloadUrl(
   kandidaatId: string

@@ -13,6 +13,8 @@ import { DIMENSION_LABELS, DIMENSION_COLORS } from "@/lib/apac/scoring";
 import type { ApacDimension } from "@/lib/apac/types";
 import AnimatedSection from "./AnimatedSection";
 
+// Demo-only illustrative scores (0-10 schaal voor visuele eenvoud).
+// Echte APAC scores gebruiken totaalpunten per dimensie (bijv. max ~50 elk).
 const BASE_SCORES = {
   adaptability: 8.5,
   personality: 7.8,

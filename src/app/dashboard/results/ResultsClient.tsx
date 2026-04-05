@@ -5,9 +5,9 @@ import { motion, useInView, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import RadarChart from "@/components/apac/RadarChart";
 import { useRealtimeApac } from "@/hooks/useRealtimeApac";
-import { calculateCombinedScore, scoreToPercentage, DIMENSION_LABELS, DIMENSION_COLORS } from "@/lib/apac/scoring";
+import { calculateCombinedScore, calculateCombinedMax, scoreToPercentage, DIMENSION_LABELS, DIMENSION_COLORS } from "@/lib/apac/scoring";
 import { APAC_DIMENSIONS } from "@/lib/apac/types";
-import type { ApacScores, ApacDimension } from "@/lib/apac/types";
+import type { ApacScores, ApacMaxScores, ApacDimension } from "@/lib/apac/types";
 import type { Article } from "../actions";
 import { markScoreRevealed } from "../actions";
 
@@ -15,6 +15,7 @@ interface Props {
   kandidaatId: string;
   firstName: string;
   initialScores: ApacScores;
+  maxScores: ApacMaxScores;
   articles: Article[];
 }
 
@@ -48,15 +49,16 @@ const DIMENSION_INSIGHTS: Record<
   },
 };
 
-function getInsight(dim: ApacDimension, score: number): string {
+function getInsight(dim: ApacDimension, score: number, maxScore: number): string {
   const insights = DIMENSION_INSIGHTS[dim];
-  if (score >= 7.5) return insights.high;
-  if (score >= 5) return insights.mid;
+  const pct = maxScore > 0 ? score / maxScore : 0;
+  if (pct >= 0.75) return insights.high;
+  if (pct >= 0.50) return insights.mid;
   return insights.low;
 }
 
-// Animated counter
-function AnimatedPercentage({ value, color, size = "text-5xl" }: { value: number; color: string; size?: string }) {
+// Animated score counter (points format: "35/50")
+function AnimatedScore({ value, max, color, size = "text-5xl" }: { value: number; max: number; color: string; size?: string }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true });
   const [display, setDisplay] = useState(0);
@@ -78,7 +80,7 @@ function AnimatedPercentage({ value, color, size = "text-5xl" }: { value: number
 
   return (
     <span ref={ref} className={`font-heading ${size} font-bold counter-animate`} style={{ color }}>
-      {display}%
+      {display}<span className="text-[0.5em] font-normal text-muted">/{max}</span>
     </span>
   );
 }
@@ -108,7 +110,7 @@ const DIMENSIONS = [
   { key: "connection"   as const, label: "Connection",   color: "#8B5CF6" },
 ];
 
-function SplashCounter({ target }: { target: number }) {
+function SplashCounter({ target, max }: { target: number; max: number }) {
   const [value, setValue] = useState(0);
   useEffect(() => {
     let start: number | null = null;
@@ -129,7 +131,7 @@ function SplashCounter({ target }: { target: number }) {
 
   return (
     <span className="gradient-text-warm font-heading text-8xl font-bold sm:text-9xl counter-animate">
-      {value}%
+      {value}<span className="text-5xl sm:text-6xl">/{max}</span>
     </span>
   );
 }
@@ -147,6 +149,7 @@ export default function ResultsClient({
   kandidaatId,
   firstName,
   initialScores,
+  maxScores,
   articles,
 }: Props) {
   const scores = useRealtimeApac(kandidaatId, initialScores);
@@ -154,14 +157,11 @@ export default function ResultsClient({
   const [splashStage, setSplashStage] = useState(0);
 
   const combined = scores ? calculateCombinedScore(scores) : 0;
-
-  // Always show splash for vpz1997, otherwise once per session
-  const ALWAYS_SPLASH_IDS = ["60731f07-8152-4b46-b834-3f6f15c83874", "c0f060b1-cbf2-4353-b39c-db17f019d00b"];
-  const alwaysSplash = initialScores && ALWAYS_SPLASH_IDS.includes(kandidaatId);
+  const combinedMax = calculateCombinedMax(maxScores);
 
   useEffect(() => {
     const key = "radical-results-seen";
-    if (!alwaysSplash && sessionStorage.getItem(key)) {
+    if (sessionStorage.getItem(key)) {
       setSplashDone(true);
       return;
     }
@@ -182,14 +182,14 @@ export default function ResultsClient({
         setSplashStage(stage);
         if (stage === 9) {
           setSplashDone(true);
-          if (!alwaysSplash) sessionStorage.setItem(key, "1");
+          sessionStorage.setItem(key, "1");
           // Mark score as revealed in database so dashboard shows full scores
           markScoreRevealed();
         }
       }, ms)
     );
     return () => timers.forEach(clearTimeout);
-  }, [alwaysSplash]);
+  }, []);
 
   // Fire confetti cannon when big score appears (stage 7 = grand finale)
   const confettiFired = useRef(false);
@@ -281,7 +281,7 @@ export default function ResultsClient({
     6;                       // fade out
 
   if (!splashDone) {
-    const pct = scoreToPercentage(combined);
+    const pct = scoreToPercentage(combined, combinedMax);
     return (
       <motion.div
         className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden"
@@ -348,7 +348,9 @@ export default function ResultsClient({
             <p className="mb-8 text-sm font-semibold uppercase tracking-[0.2em] text-smaragd">Je dimensies in detail</p>
             <div className="grid w-full max-w-lg grid-cols-1 gap-y-5 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-6">
               {DIMENSIONS.map((dim, i) => {
-                const dimPct = scoreToPercentage(scores[dim.key]);
+                const dimPct = scoreToPercentage(scores[dim.key], maxScores[dim.key]);
+                const dimScore = Math.round(scores[dim.key]);
+                const dimMax = maxScores[dim.key];
                 return (
                   <motion.div key={dim.key} initial={{ opacity: 0, x: i % 2 === 0 ? -40 : 40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: i * 0.2 }}>
                     <div className="flex items-center justify-between">
@@ -356,7 +358,7 @@ export default function ResultsClient({
                         <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: dim.color }} />
                         <span className="text-sm font-semibold" style={{ color: dim.color }}>{dim.label}</span>
                       </div>
-                      <span className="font-heading text-lg font-bold text-heading">{dimPct}%</span>
+                      <span className="font-heading text-lg font-bold text-heading">{dimScore}<span className="text-sm font-normal text-muted">/{dimMax}</span></span>
                     </div>
                     <div className="mt-2.5 h-2 w-full rounded-full bg-surface-light/15 overflow-hidden">
                       <motion.div className="h-full rounded-full" style={{ backgroundColor: dim.color }} initial={{ width: 0 }} animate={{ width: `${dimPct}%` }} transition={{ duration: 1.5, delay: 0.3 + i * 0.2 }} />
@@ -432,7 +434,7 @@ export default function ResultsClient({
               animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
               transition={{ duration: 2.5, ease: [0.16, 1, 0.3, 1] }}
             >
-              <SplashCounter target={pct} />
+              <SplashCounter target={combined} max={combinedMax} />
             </motion.div>
             <motion.p
               initial={{ opacity: 0 }}
@@ -507,7 +509,7 @@ export default function ResultsClient({
         <div className="glass rounded-2xl px-10 py-6 text-center" style={{ boxShadow: "0 0 40px rgba(46,213,115,0.12), 0 0 80px rgba(230,115,79,0.08)" }}>
           <p className="text-sm font-medium text-muted">Gecombineerde score</p>
           <div className="mt-1 gradient-text-warm">
-            <AnimatedPercentage value={scoreToPercentage(combined)} color="inherit" size="text-5xl" />
+            <AnimatedScore value={combined} max={combinedMax} color="inherit" size="text-5xl" />
           </div>
         </div>
       </motion.div>
@@ -524,7 +526,7 @@ export default function ResultsClient({
           {/* Glow behind chart */}
           <div className="absolute inset-0 rounded-full bg-smaragd/8 blur-[60px]" />
           <div className="relative">
-            <RadarChart scores={scores} maxSize={400} animated />
+            <RadarChart scores={scores} maxScores={maxScores} maxSize={400} animated />
           </div>
         </div>
       </motion.div>
@@ -533,7 +535,7 @@ export default function ResultsClient({
       <div className="grid grid-cols-2 gap-4 sm:gap-5">
         {APAC_DIMENSIONS.map((dim, i) => {
           const color = DIMENSION_COLORS[dim];
-          const pct = scoreToPercentage(scores[dim]);
+          const pct = scoreToPercentage(scores[dim], maxScores[dim]);
           return (
             <motion.div
               key={dim}
@@ -545,7 +547,7 @@ export default function ResultsClient({
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold" style={{ color }}>{DIMENSION_LABELS[dim]}</span>
-                <AnimatedPercentage value={pct} color={color} size="text-2xl" />
+                <AnimatedScore value={Math.round(scores[dim])} max={maxScores[dim]} color={color} size="text-2xl" />
               </div>
               <AnimatedBar percentage={pct} color={color} delay={i * 0.12} />
             </motion.div>
@@ -557,8 +559,8 @@ export default function ResultsClient({
       <div className="space-y-5">
         {APAC_DIMENSIONS.map((dim, i) => {
           const color = DIMENSION_COLORS[dim];
-          const pct = scoreToPercentage(scores[dim]);
-          const insight = getInsight(dim, scores[dim]);
+          const pct = scoreToPercentage(scores[dim], maxScores[dim]);
+          const insight = getInsight(dim, scores[dim], maxScores[dim]);
 
           return (
             <DimensionCard
@@ -567,6 +569,8 @@ export default function ResultsClient({
               dim={dim}
               color={color}
               pct={pct}
+              score={Math.round(scores[dim])}
+              maxScore={maxScores[dim]}
               title={DIMENSION_INSIGHTS[dim].title}
               insight={insight}
             />
@@ -587,6 +591,8 @@ function DimensionCard({
   dim,
   color,
   pct,
+  score,
+  maxScore,
   title,
   insight,
 }: {
@@ -594,6 +600,8 @@ function DimensionCard({
   dim: ApacDimension;
   color: string;
   pct: number;
+  score: number;
+  maxScore: number;
   title: string;
   insight: string;
 }) {
@@ -623,7 +631,7 @@ function DimensionCard({
           className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl"
           style={{ background: `${color}15` }}
         >
-          <span className="font-heading text-xl font-bold" style={{ color }}>{pct}%</span>
+          <span className="font-heading text-lg font-bold" style={{ color }}>{score}<span className="text-xs font-normal text-muted">/{maxScore}</span></span>
         </div>
         <div className="flex-1">
           <p className="font-heading text-sm font-bold" style={{ color }}>{DIMENSION_LABELS[dim]}</p>

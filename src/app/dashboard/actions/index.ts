@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import type { ApacScores } from "@/lib/apac/types";
+import type { ApacScores, ApacMaxScores } from "@/lib/apac/types";
+import { calculateMaxScores } from "@/lib/apac/scoring";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +37,7 @@ export interface DashboardData {
     isFirstLogin: boolean;
   };
   scores: ApacScores | null;
+  maxScores: ApacMaxScores | null;
   scoreRevealed: boolean;
 }
 
@@ -51,7 +53,7 @@ export interface Article {
 // ---------------------------------------------------------------------------
 // Demo override — always shows "no results yet" for this email
 // ---------------------------------------------------------------------------
-const DEMO_RESET_EMAIL = "vpz1997@gmail.com";
+const DEMO_RESET_EMAIL = process.env.DEMO_RESET_EMAIL ?? "";
 
 // ---------------------------------------------------------------------------
 // 1. Get dashboard data (user + kandidaat + latest APAC scores)
@@ -128,6 +130,26 @@ export async function getDashboardData(): Promise<DashboardData | null> {
 
   const isDemo = portalUser.email === DEMO_RESET_EMAIL;
 
+  // Get max scores from active APAC questions
+  let maxScoresResult: ApacMaxScores | null = null;
+  if (scores) {
+    const serviceClient = createServiceClient();
+    const { data: questions } = await serviceClient
+      .from("apac_questions")
+      .select("variable, options, weight")
+      .eq("is_active", true);
+
+    if (questions && questions.length > 0) {
+      maxScoresResult = calculateMaxScores(
+        questions.map((q) => ({
+          variable: q.variable,
+          options: (q.options as { value: number }[]) ?? [],
+          weight: q.weight ?? 1,
+        }))
+      );
+    }
+  }
+
   return {
     user: {
       firstName: portalUser.first_name ?? "",
@@ -142,6 +164,7 @@ export async function getDashboardData(): Promise<DashboardData | null> {
       isFirstLogin,
     },
     scores,
+    maxScores: maxScoresResult,
     scoreRevealed: isDemo ? false : (portalUser.score_revealed ?? false),
   };
 }

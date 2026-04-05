@@ -5,7 +5,7 @@ import Link from "next/link";
 import RadarChart from "@/components/apac/RadarChart";
 import ProfileModal from "@/components/profile/ProfileModal";
 import { useRealtimeApac } from "@/hooks/useRealtimeApac";
-import { calculateCombinedScore, scoreToPercentage } from "@/lib/apac/scoring";
+import { calculateCombinedScore, calculateCombinedMax, scoreToPercentage } from "@/lib/apac/scoring";
 import type { DashboardData } from "./actions";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -143,7 +143,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
               {/* Mystery score */}
               <div className="mt-6 flex items-baseline gap-1">
                 <span className="font-heading text-7xl font-bold text-heading/10 sm:text-8xl select-none blur-lg">
-                  84%
+                  168/200
                 </span>
               </div>
 
@@ -189,7 +189,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
             <div className="relative mt-6 grid items-center gap-6 lg:grid-cols-[240px_1fr]">
               {/* Radar */}
               <div className="flex justify-center">
-                <RadarChart scores={liveScores} maxSize={220} animated />
+                <RadarChart scores={liveScores} maxScores={data.maxScores ?? { adaptability: 0, personality: 0, awareness: 0, connection: 0 }} maxSize={220} animated />
               </div>
 
               {/* Scores + CTA */}
@@ -197,20 +197,24 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
                 {/* Combined score big */}
                 <div className="flex items-baseline gap-3">
                   <span className="gradient-text-warm font-heading text-5xl font-bold sm:text-6xl">
-                    {scoreToPercentage(calculateCombinedScore(liveScores))}%
+                    {calculateCombinedScore(liveScores)}
                   </span>
-                  <span className="text-sm text-muted">gecombineerd</span>
+                  {data.maxScores && (
+                    <span className="text-lg text-muted">/{calculateCombinedMax(data.maxScores)}</span>
+                  )}
+                  <span className="text-sm text-muted">punten</span>
                 </div>
 
                 {/* Mini score bars */}
                 <div className="mt-5 grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-x-6">
                   {DIMENSIONS.map((dim) => {
-                    const pct = scoreToPercentage(liveScores[dim.key]);
+                    const dimMax = data.maxScores?.[dim.key] ?? 0;
+                    const pct = scoreToPercentage(liveScores[dim.key], dimMax);
                     return (
                       <div key={dim.key}>
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium" style={{ color: dim.color }}>{dim.label}</span>
-                          <span className="text-xs font-bold text-heading">{pct}%</span>
+                          <span className="text-xs font-bold text-heading">{liveScores[dim.key]}/{dimMax}</span>
                         </div>
                         <div className="mt-1 h-1 w-full rounded-full bg-surface-light">
                           <div

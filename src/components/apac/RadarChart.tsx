@@ -20,12 +20,13 @@ import {
   PolarAngleAxis,
   ResponsiveContainer,
 } from "recharts";
-import type { ApacScores } from "@/lib/apac/types";
+import type { ApacScores, ApacMaxScores } from "@/lib/apac/types";
 import { DIMENSION_LABELS, DIMENSION_COLORS } from "@/lib/apac/scoring";
 import type { ApacDimension } from "@/lib/apac/types";
 
 interface RadarChartProps {
   scores: ApacScores;
+  maxScores: ApacMaxScores;
   maxSize?: number;
   animated?: boolean;
 }
@@ -40,6 +41,7 @@ const LABEL_TO_DIM: Record<string, ApacDimension> = {
 
 export default function RadarChart({
   scores,
+  maxScores,
   maxSize = 360,
   animated = true,
 }: RadarChartProps) {
@@ -83,10 +85,10 @@ export default function RadarChart({
   }
 
   const data = [
-    { dimension: DIMENSION_LABELS.adaptability, score: animatedScores.adaptability, fullMark: 10 },
-    { dimension: DIMENSION_LABELS.personality, score: animatedScores.personality, fullMark: 10 },
-    { dimension: DIMENSION_LABELS.awareness, score: animatedScores.awareness, fullMark: 10 },
-    { dimension: DIMENSION_LABELS.connection, score: animatedScores.connection, fullMark: 10 },
+    { dimension: DIMENSION_LABELS.adaptability, score: animatedScores.adaptability, fullMark: maxScores.adaptability, maxScore: maxScores.adaptability },
+    { dimension: DIMENSION_LABELS.personality, score: animatedScores.personality, fullMark: maxScores.personality, maxScore: maxScores.personality },
+    { dimension: DIMENSION_LABELS.awareness, score: animatedScores.awareness, fullMark: maxScores.awareness, maxScore: maxScores.awareness },
+    { dimension: DIMENSION_LABELS.connection, score: animatedScores.connection, fullMark: maxScores.connection, maxScore: maxScores.connection },
   ];
 
   const center = measuredSize / 2;
@@ -121,12 +123,14 @@ export default function RadarChart({
             tick={({ x, y, payload }) => {
               const dim = LABEL_TO_DIM[payload.value];
               const color = dim ? DIMENSION_COLORS[dim] : "#2ed573";
+              const item = data.find((d) => d.dimension === payload.value);
               return (
                 <CustomAxisTick
                   x={Number(x)}
                   y={Number(y)}
                   value={payload.value}
-                  score={data.find((d) => d.dimension === payload.value)?.score ?? 0}
+                  score={item?.score ?? 0}
+                  maxScore={item?.maxScore ?? 0}
                   color={color}
                   center={center}
                 />
@@ -169,6 +173,7 @@ function CustomAxisTick({
   y,
   value,
   score,
+  maxScore,
   color,
   center,
 }: {
@@ -176,10 +181,10 @@ function CustomAxisTick({
   y: number;
   value: string;
   score: number;
+  maxScore: number;
   color: string;
   center: number;
 }) {
-  const percentage = Math.round(score * 10);
   const isSmall = center < 175;
 
   const offset = center * 0.11;
@@ -212,7 +217,7 @@ function CustomAxisTick({
           fontSize: isSmall ? 12 : 14,
         }}
       >
-        {percentage}%
+        {Math.round(score)}/{maxScore}
       </text>
     </g>
   );

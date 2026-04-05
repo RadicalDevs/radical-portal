@@ -127,7 +127,7 @@ function Section1Kpis({ kpis }: { kpis: AnalyticsKpis }) {
       <KpiCard
         label="Gem. gecombineerd"
         value={kpis.gemiddeldeGecombineerd.toFixed(1)}
-        sub="/ 10"
+        sub="punten gem."
       />
       <KpiCard
         label="Doorstroom"
@@ -236,9 +236,11 @@ function Section2Opleidingsniveaus({ rows }: { rows: OpleidingsniveauRow[] }) {
 function Section3Radar({
   radar,
   totaal,
+  maxScores,
 }: {
   radar: AnalyticsData["populatieRadar"];
   totaal: number;
+  maxScores: AnalyticsData["maxScores"];
 }) {
   return (
     <SectionCard
@@ -246,7 +248,7 @@ function Section3Radar({
       subtitle={`Gemiddelde scores over alle ${totaal} kandidaten`}
     >
       <div className="flex items-center justify-center py-2">
-        <RadarChart scores={radar} maxSize={280} animated={false} />
+        <RadarChart scores={radar} maxScores={maxScores} maxSize={280} animated={false} />
       </div>
     </SectionCard>
   );
@@ -371,7 +373,7 @@ export default function AnalyticsClient({ data }: { data: AnalyticsData }) {
       <Section1Kpis kpis={data.kpis} />
       <Section2Opleidingsniveaus rows={data.opleidingsniveaus} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section3Radar radar={data.populatieRadar} totaal={data.kpis.totaalGetest} />
+        <Section3Radar radar={data.populatieRadar} totaal={data.kpis.totaalGetest} maxScores={data.maxScores} />
         <Section4PoolStatus verdeling={data.poolStatusVerdeling} />
       </div>
       <Section5Instroom weeklyInstroom={data.weeklyInstroom} />
