@@ -2,265 +2,242 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { KandidaatPlaatsingStatus, PipelineType } from "@/lib/types/crm";
-import { getStageConfig } from "@/config/pipeline";
-import { Card } from "@/components/crm/ui/Card";
-import { Badge } from "@/components/crm/ui/Badge";
-import { PoolStatusBadge } from "@/components/crm/ui/PoolStatusBadge";
-import { Skeleton } from "@/components/crm/ui/Skeleton";
-import { EmptyState } from "@/components/crm/ui/EmptyState";
 import type { PoolStatus } from "@/lib/types/crm";
+import { KanbanBoard } from "@/components/crm/kanban/KanbanBoard";
+import { KanbanColumn } from "@/components/crm/kanban/KanbanColumn";
+import { KanbanCard, KanbanCardOverlay } from "@/components/crm/kanban/KanbanCard";
+import { Badge } from "@/components/crm/ui/Badge";
 
-interface PipelineEntry {
-  id: string;
-  status: KandidaatPlaatsingStatus;
-  stage: string;
-  kandidaat: {
-    id: string;
-    voornaam: string;
-    achternaam: string;
-    pool_status: PoolStatus;
-  } | null;
-  vacature: {
-    id: string;
-    functietitel: string;
-    klant: { bedrijfsnaam: string } | null;
-  } | null;
-  deal: {
-    id: string;
-    stage: string;
-    pipeline_type: PipelineType;
-  } | null;
+// ─── Column config ──────────────────────────────────────────────────────────
+
+interface ColumnConfig {
+  key: PoolStatus;
+  label: string;
+  color: string;
 }
 
-const STATUS_VARIANTS: Record<string, "smaragd" | "warning" | "coral" | "default" | "blue" | "purple"> = {
-  voorgesteld: "blue",
-  in_gesprek: "warning",
-  geselecteerd: "purple",
-  geplaatst: "smaragd",
-  afgewezen: "coral",
-};
+const COLUMNS: ColumnConfig[] = [
+  { key: "prospect",     label: "Prospect",     color: "#6B7280" },
+  { key: "in_selectie",  label: "In Selectie",  color: "#F59E0B" },
+  { key: "radical",      label: "Radical",       color: "#2ed573" },
+  { key: "alumni",       label: "Alumni",        color: "#8B5CF6" },
+];
 
-const PIPELINE_LABELS: Record<string, string> = {
-  permanent: "Permanent",
-  interim: "Interim",
-  project: "Project",
-};
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-type StatusFilter = KandidaatPlaatsingStatus | null;
-type TypeFilter = PipelineType | null;
+interface KanbanKandidaat {
+  id: string;
+  voornaam: string;
+  achternaam: string;
+  pool_status: PoolStatus;
+  vaardigheden: string[] | null;
+  tags: string[] | null;
+  email: string | null;
+}
 
-export default function KandidaatPipelinePage() {
-  const [entries, setEntries] = useState<PipelineEntry[]>([]);
+// ─── Page ───────────────────────────────────────────────────────────────────
+
+export default function KandidatenPipelinePage() {
+  const [kandidaten, setKandidaten] = useState<KanbanKandidaat[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(null);
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>(null);
   const supabase = useMemo(() => createClient(), []);
 
-  const fetchEntries = useCallback(async () => {
+  const fetchKandidaten = useCallback(async () => {
     const { data, error } = await supabase
-      .from("kandidaat_plaatsingen")
-      .select(
-        "id, status, stage, kandidaat:kandidaten(id, voornaam, achternaam, pool_status), vacature:vacatures(id, functietitel, klant:klanten(bedrijfsnaam)), deal:deals(id, stage, pipeline_type)"
-      )
+      .from("kandidaten")
+      .select("id, voornaam, achternaam, pool_status, vaardigheden, tags, email")
       .order("created_at", { ascending: false });
 
-    if (error) console.error("[KandidaatPipeline] fetch error:", error.message);
-    setEntries((data || []) as unknown as PipelineEntry[]);
+    if (error) console.error("[KandidatenKanban] fetch:", error.message);
+    setKandidaten((data || []) as KanbanKandidaat[]);
     setLoading(false);
   }, [supabase]);
 
+  // Initial fetch
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
+    fetchKandidaten();
+  }, [fetchKandidaten]);
 
-  const filtered = entries.filter((e) => {
-    if (!e.kandidaat) return false;
-    if (statusFilter && e.status !== statusFilter) return false;
-    if (typeFilter && e.deal?.pipeline_type !== typeFilter) return false;
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const naam = `${e.kandidaat.voornaam} ${e.kandidaat.achternaam}`.toLowerCase();
-    const vacature = e.vacature?.functietitel?.toLowerCase() || "";
-    const klant = e.vacature?.klant?.bedrijfsnaam?.toLowerCase() || "";
-    return naam.includes(q) || vacature.includes(q) || klant.includes(q);
-  });
+  // Realtime: auto-update when pool_status changes (e.g. from detail modal)
+  useEffect(() => {
+    const channel = supabase
+      .channel("kandidaten-kanban")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "kandidaten" },
+        (payload) => {
+          const updated = payload.new as KanbanKandidaat;
+          setKandidaten((prev) =>
+            prev.map((k) => (k.id === updated.id ? { ...k, ...updated } : k))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "kandidaten" },
+        (payload) => {
+          const inserted = payload.new as KanbanKandidaat;
+          setKandidaten((prev) => [inserted, ...prev]);
+        }
+      )
+      .subscribe();
 
-  const stats = {
-    totaal: entries.length,
-    in_gesprek: entries.filter((e) => e.status === "in_gesprek").length,
-    voorgesteld: entries.filter((e) => e.status === "voorgesteld").length,
-    geplaatst: entries.filter((e) => e.status === "geplaatst").length,
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
+  // Drag handler — optimistic update + DB write
+  const handleDragEnd = async (kandidaatId: string, overId: string) => {
+    // overId could be a column key (pool_status) or another card id
+    let newStatus: PoolStatus;
+    const isColumn = COLUMNS.some((c) => c.key === overId);
+    if (isColumn) {
+      newStatus = overId as PoolStatus;
+    } else {
+      const targetKandidaat = kandidaten.find((k) => k.id === overId);
+      if (!targetKandidaat) return;
+      newStatus = targetKandidaat.pool_status;
+    }
+
+    const kandidaat = kandidaten.find((k) => k.id === kandidaatId);
+    if (!kandidaat || kandidaat.pool_status === newStatus) return;
+
+    // Optimistic update
+    const previous = kandidaten;
+    setKandidaten((prev) =>
+      prev.map((k) =>
+        k.id === kandidaatId ? { ...k, pool_status: newStatus } : k
+      )
+    );
+
+    const { error } = await supabase
+      .from("kandidaten")
+      .update({ pool_status: newStatus })
+      .eq("id", kandidaatId);
+
+    if (error) {
+      console.error("[KandidatenKanban] drag update failed:", error);
+      setKandidaten(previous);
+    }
   };
 
-  return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-heading">Pipeline Overzicht</h1>
-        <p className="mt-1 text-sm text-muted">
-          Alle kandidaten en hun huidige status per vacature
-        </p>
-      </div>
+  // Search filter
+  const filtered = searchQuery.trim()
+    ? kandidaten.filter((k) => {
+        const q = searchQuery.toLowerCase();
+        const naam = `${k.voornaam} ${k.achternaam}`.toLowerCase();
+        const skills = (k.vaardigheden || []).join(" ").toLowerCase();
+        return naam.includes(q) || skills.includes(q);
+      })
+    : kandidaten;
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {[
-          { label: "Totaal", value: stats.totaal, color: "text-heading" },
-          { label: "Voorgesteld", value: stats.voorgesteld, color: "text-blue-400" },
-          { label: "In Gesprek", value: stats.in_gesprek, color: "text-amber-400" },
-          { label: "Geplaatst", value: stats.geplaatst, color: "text-smaragd" },
-        ].map((s) => (
-          <Card key={s.label} padding="sm">
-            <p className="text-xs text-muted">{s.label}</p>
-            <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
-          </Card>
-        ))}
+  // Render drag overlay
+  const renderOverlay = (activeId: string) => {
+    const k = kandidaten.find((k) => k.id === activeId);
+    if (!k) return null;
+    return (
+      <KanbanCardOverlay>
+        <p className="text-sm font-semibold text-heading">
+          {k.voornaam} {k.achternaam}
+        </p>
+      </KanbanCardOverlay>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-4">
+        <div className="h-8 w-64 animate-pulse rounded-lg bg-surface-light" />
+        <div className="flex gap-4">
+          {COLUMNS.map((c) => (
+            <div key={c.key} className="w-72 h-96 animate-pulse rounded-xl bg-surface-light" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-heading">Kandidaten Pipeline</h1>
+          <p className="mt-1 text-sm text-muted">
+            Sleep kandidaten tussen fases om hun status te wijzigen
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {COLUMNS.map((c) => {
+            const count = filtered.filter((k) => k.pool_status === c.key).length;
+            return (
+              <div key={c.key} className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c.color }} />
+                <span className="text-xs text-muted">{count}</span>
+              </div>
+            );
+          })}
+          <span className="text-xs font-medium text-heading">{filtered.length} totaal</span>
+        </div>
       </div>
 
       {/* Search */}
       <input
         type="text"
-        placeholder="Zoek op kandidaat, vacature of klant..."
+        placeholder="Zoek op naam of vaardigheden..."
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        className="w-full rounded-lg border border-surface-border bg-surface-light px-4 py-2.5 text-sm text-heading placeholder:text-muted outline-none focus:border-smaragd/50"
+        className="w-full max-w-md rounded-lg border border-surface-border bg-surface-light px-4 py-2 text-sm text-heading placeholder:text-muted outline-none focus:border-smaragd/50"
       />
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-muted">Status</span>
-          {([
-            { label: "Alle", value: null },
-            { label: "Voorgesteld", value: "voorgesteld" as KandidaatPlaatsingStatus },
-            { label: "In Gesprek", value: "in_gesprek" as KandidaatPlaatsingStatus },
-            { label: "Geselecteerd", value: "geselecteerd" as KandidaatPlaatsingStatus },
-            { label: "Geplaatst", value: "geplaatst" as KandidaatPlaatsingStatus },
-            { label: "Afgewezen", value: "afgewezen" as KandidaatPlaatsingStatus },
-          ]).map((opt) => (
-            <button
-              key={String(opt.value)}
-              onClick={() => setStatusFilter(opt.value)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
-                statusFilter === opt.value
-                  ? "border-smaragd bg-smaragd/10 text-smaragd"
-                  : "border-surface-border bg-transparent text-muted hover:text-heading"
-              }`}
+      {/* Kanban */}
+      <KanbanBoard onDragEnd={handleDragEnd} renderOverlay={renderOverlay}>
+        {COLUMNS.map((col) => {
+          const columnKandidaten = filtered.filter((k) => k.pool_status === col.key);
+          return (
+            <KanbanColumn
+              key={col.key}
+              id={col.key}
+              title={col.label}
+              color={col.color}
+              count={columnKandidaten.length}
             >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="h-4 w-px bg-surface-border" />
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-muted">Type</span>
-          {([
-            { label: "Alle", value: null },
-            { label: "Permanent", value: "permanent" as PipelineType },
-            { label: "Interim", value: "interim" as PipelineType },
-            { label: "Project", value: "project" as PipelineType },
-          ]).map((opt) => (
-            <button
-              key={String(opt.value)}
-              onClick={() => setTypeFilter(opt.value)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
-                typeFilter === opt.value
-                  ? "border-smaragd bg-smaragd/10 text-smaragd"
-                  : "border-surface-border bg-transparent text-muted hover:text-heading"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <Skeleton variant="table-row" count={5} />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          title="Geen pipeline entries gevonden"
-          description="Er zijn nog geen kandidaten gekoppeld aan vacatures."
-        />
-      ) : (
-        <Card hover={false} padding="sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-border">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted">Kandidaat</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted">Pool</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted">Vacature</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted">Klant</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted">Pipeline</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted">Deal Stage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((e) => {
-                  const stageConfig = e.deal ? getStageConfig(e.deal.stage) : null;
-                  return (
-                    <tr
-                      key={e.id}
-                      className="border-b border-surface-border transition-colors hover:bg-surface-light"
-                    >
-                      <td className="px-4 py-3">
-                        <a
-                          href={`/admin/candidates?id=${e.kandidaat!.id}`}
-                          className="font-medium text-smaragd hover:underline"
-                        >
-                          {e.kandidaat!.voornaam} {e.kandidaat!.achternaam}
-                        </a>
-                      </td>
-                      <td className="px-4 py-3">
-                        <PoolStatusBadge status={e.kandidaat!.pool_status || "prospect"} size="sm" />
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant={STATUS_VARIANTS[e.status] || "default"}>
-                          {e.status === "in_gesprek" ? "In Gesprek" : e.status.charAt(0).toUpperCase() + e.status.slice(1)}
+              {columnKandidaten.map((k) => (
+                <KanbanCard
+                  key={k.id}
+                  id={k.id}
+                  onClick={() => {
+                    window.location.href = `/admin/candidates?id=${k.id}`;
+                  }}
+                >
+                  <p className="text-sm font-semibold text-heading">
+                    {k.voornaam} {k.achternaam}
+                  </p>
+                  {k.email && (
+                    <p className="mt-0.5 text-xs text-muted truncate">{k.email}</p>
+                  )}
+                  {k.vaardigheden && k.vaardigheden.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {k.vaardigheden.slice(0, 3).map((v) => (
+                        <Badge key={v} variant="default">
+                          {v}
                         </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        {e.vacature ? (
-                          <a
-                            href={`/admin/vacatures/${e.vacature.id}`}
-                            className="text-heading hover:text-smaragd hover:underline"
-                          >
-                            {e.vacature.functietitel}
-                          </a>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-muted">
-                        {e.vacature?.klant?.bedrijfsnaam || "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {e.deal ? (
-                          <Badge variant={e.deal.pipeline_type === "permanent" ? "blue" : e.deal.pipeline_type === "interim" ? "purple" : "warning"}>
-                            {PIPELINE_LABELS[e.deal.pipeline_type] || e.deal.pipeline_type}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted">
-                        {stageConfig?.label || e.deal?.stage || "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+                      ))}
+                      {k.vaardigheden.length > 3 && (
+                        <span className="text-[10px] text-muted">
+                          +{k.vaardigheden.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </KanbanCard>
+              ))}
+            </KanbanColumn>
+          );
+        })}
+      </KanbanBoard>
     </div>
   );
 }
