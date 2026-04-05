@@ -124,7 +124,6 @@ const navGroups: NavGroup[] = [
     links: [
       { href: "/admin/klanten",    label: "Klanten",        icon: Icon.Klanten },
       { href: "/admin/vacatures",  label: "Vacatures",      icon: Icon.Vacatures },
-      { href: "/admin/pipeline",   label: "Pipeline",       icon: Icon.Pipeline },
       { href: "/admin/facturatie", label: "Facturatie",     icon: Icon.Facturatie },
       { href: "/admin/rapportages",label: "Rapportages",    icon: Icon.Rapportages },
       { href: "/admin/taken",      label: "Taken",          icon: Icon.Taken },
@@ -133,10 +132,12 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-const pipelineSubLinks: NavLink[] = [
-  { href: "/admin/pipeline/permanent", label: "Permanent", icon: Icon.Pipeline },
-  { href: "/admin/pipeline/interim",   label: "Interim",   icon: Icon.Pipeline },
-  { href: "/admin/pipeline/project",   label: "Project",   icon: Icon.Pipeline },
+const kandidatenSubLinks: NavLink[] = [
+  { href: "/admin/candidates",          label: "Overzicht",  icon: Icon.Kandidaten },
+  { href: "/admin/candidates/pipeline", label: "Pipeline",   icon: Icon.Pipeline },
+  { href: "/admin/pipeline/permanent",  label: "Permanent",  icon: Icon.Pipeline },
+  { href: "/admin/pipeline/interim",    label: "Interim",    icon: Icon.Pipeline },
+  { href: "/admin/pipeline/project",    label: "Project",    icon: Icon.Pipeline },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -144,8 +145,8 @@ const pipelineSubLinks: NavLink[] = [
 export default function AdminSidebar({ userName }: { userName?: string }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [pipelineOpen, setPipelineOpen] = useState(
-    pathname.startsWith("/admin/pipeline")
+  const [kandidatenOpen, setKandidatenOpen] = useState(
+    pathname.startsWith("/admin/candidates") || pathname.startsWith("/admin/pipeline")
   );
 
   const isActive = (href: string) => {
@@ -210,17 +211,18 @@ export default function AdminSidebar({ userName }: { userName?: string }) {
             {group.links.map((link) => {
               const active = isActive(link.href);
 
-              if (link.href === "/admin/pipeline") {
+              if (link.href === "/admin/candidates") {
+                const candidatesActive = pathname.startsWith("/admin/candidates") || pathname.startsWith("/admin/pipeline");
                 return (
                   <div key={link.href}>
                     <button
                       onClick={() => {
                         if (collapsed) return;
-                        setPipelineOpen(!pipelineOpen);
+                        setKandidatenOpen(!kandidatenOpen);
                       }}
                       title={collapsed ? link.label : undefined}
                       className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium transition-colors ${
-                        active
+                        candidatesActive
                           ? activeBg[group.accent]
                           : "text-muted hover:bg-surface-light hover:text-heading"
                       } ${collapsed ? "justify-center" : "justify-between"}`}
@@ -229,12 +231,12 @@ export default function AdminSidebar({ userName }: { userName?: string }) {
                         <link.icon />
                         {!collapsed && link.label}
                       </span>
-                      {!collapsed && <Icon.Chevron open={pipelineOpen} />}
+                      {!collapsed && <Icon.Chevron open={kandidatenOpen} />}
                     </button>
 
-                    {pipelineOpen && !collapsed && (
+                    {kandidatenOpen && !collapsed && (
                       <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l-2 border-surface-border pl-3">
-                        {pipelineSubLinks.map((sub) => (
+                        {kandidatenSubLinks.map((sub) => (
                           <Link
                             key={sub.href}
                             href={sub.href}
