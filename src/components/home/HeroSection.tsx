@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import ParticleNetwork from "./ParticleNetwork";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
@@ -14,6 +15,8 @@ const fadeInUp = {
 };
 
 export default function HeroSection() {
+  const { t } = useLanguage();
+
   return (
     <section className="relative flex min-h-[92vh] flex-col items-center justify-center overflow-hidden px-4 text-center">
       {/* Background layers */}
@@ -34,7 +37,7 @@ export default function HeroSection() {
           className="mb-8 inline-flex items-center gap-2 rounded-full border border-smaragd/25 bg-smaragd/8 px-5 py-2 text-sm font-medium text-smaragd backdrop-blur-sm"
         >
           <span className="h-2 w-2 rounded-full bg-smaragd animate-pulse" />
-          Ontdek wat jou uniek maakt
+          {t("hero_badge")}
         </motion.div>
 
         <motion.h1
@@ -62,11 +65,11 @@ export default function HeroSection() {
           variants={fadeInUp}
           initial="hidden"
           animate="visible"
-          className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-muted sm:text-xl"
+          className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-heading sm:text-xl"
         >
-          Radical verbindt AI-professionals die het verschil maken door wie ze zijn.
-          Geselecteerd op <span className="text-heading font-medium">menselijke kwaliteiten</span>,
-          niet alleen technische skills.
+          {t("hero_desc_pre")}{" "}
+          <span className="font-medium text-smaragd">{t("hero_desc_accent")}</span>
+          {t("hero_desc_post")}
         </motion.p>
 
         <motion.div
@@ -80,7 +83,7 @@ export default function HeroSection() {
             href="/apac"
             className="group relative inline-flex items-center gap-2 rounded-2xl bg-smaragd px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all duration-300 hover:bg-smaragd-dark hover:shadow-[0_0_40px_rgba(46,213,115,0.4)] hover:-translate-y-1 animate-shimmer"
           >
-            Doe de APAC-test
+            {t("hero_cta_primary")}
             <svg
               className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1"
               fill="none"
@@ -99,7 +102,7 @@ export default function HeroSection() {
             href="#hoe-het-werkt"
             className="inline-flex items-center gap-2 rounded-2xl border border-surface-border/60 bg-surface/60 px-8 py-4 text-lg font-semibold text-heading backdrop-blur-md transition-all duration-300 hover:border-smaragd/30 hover:bg-smaragd/5"
           >
-            Ontdek hoe het werkt
+            {t("hero_cta_secondary")}
             <svg
               className="h-4 w-4 animate-bounce"
               fill="none"

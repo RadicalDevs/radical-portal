@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { getQuestionAnalytics } from "../actions";
-import type { QuestionAnalyticsData, QuestionAnalyticsItem, QuestionAnalyticsRespondent } from "../actions";
+import { getQuestionAnalytics, getRespondentComments } from "../actions";
+import type { QuestionAnalyticsData, QuestionAnalyticsItem, QuestionAnalyticsRespondent, RespondentComment } from "../actions";
 
 const PERIOD_OPTIONS = [
   { value: "all", label: "Alle tijd" },
@@ -38,14 +38,20 @@ const VAR_LABELS: Record<string, string> = {
 
 export default function QuestionAnalyticsClient() {
   const [data, setData] = useState<QuestionAnalyticsData | null>(null);
+  const [comments, setComments] = useState<RespondentComment[]>([]);
   const [period, setPeriod] = useState<Period>("all");
   const [isLoading, startTransition] = useTransition();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function loadData(p: Period) {
     startTransition(async () => {
-      const result = await getQuestionAnalytics(p === "all" ? undefined : p);
-      setData(result);
+      const periodArg = p === "all" ? undefined : p;
+      const [analyticsResult, commentsResult] = await Promise.all([
+        getQuestionAnalytics(periodArg),
+        getRespondentComments(periodArg),
+      ]);
+      setData(analyticsResult);
+      setComments(commentsResult);
     });
   }
 
@@ -172,6 +178,39 @@ export default function QuestionAnalyticsClient() {
           ))}
         </div>
       )}
+
+      {/* Respondent opmerkingen */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-heading flex items-center gap-2">
+          Opmerkingen van respondenten
+          <span className="rounded-full bg-surface-light px-2 py-0.5 text-xs font-medium text-muted">
+            {comments.length}
+          </span>
+        </h3>
+        {comments.length === 0 ? (
+          <div className="rounded-xl border border-surface-border bg-surface p-8 text-center text-sm text-muted">
+            Nog geen opmerkingen ontvangen. Zodra respondenten feedback achterlaten aan het einde van de test, verschijnen ze hier.
+          </div>
+        ) : (
+          comments.map((c) => (
+            <div
+              key={`${c.kandidaatId}-${c.date}`}
+              className="rounded-xl border border-surface-border bg-surface p-4"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium text-heading truncate">{c.naam}</span>
+                  <span className="text-xs text-muted truncate">{c.email}</span>
+                </div>
+                <span className="text-xs text-muted shrink-0">
+                  {new Date(c.date).toLocaleDateString("nl-NL")}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-body whitespace-pre-wrap">{c.comment}</p>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

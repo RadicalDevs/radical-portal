@@ -122,8 +122,11 @@ const navGroups: NavGroup[] = [
     title: "CRM",
     accent: "coral",
     links: [
-      { href: "/admin/klanten",    label: "Klanten",        icon: Icon.Klanten },
-      { href: "/admin/vacatures",  label: "Vacatures",      icon: Icon.Vacatures },
+      { href: "/admin/klanten",            label: "Klanten",    icon: Icon.Klanten },
+      { href: "/admin/pipeline/permanent", label: "Permanent",  icon: Icon.Pipeline },
+      { href: "/admin/pipeline/interim",   label: "Interim",    icon: Icon.Pipeline },
+      { href: "/admin/pipeline/project",   label: "Project",    icon: Icon.Pipeline },
+      { href: "/admin/vacatures",          label: "Vacatures",  icon: Icon.Vacatures },
       { href: "/admin/facturatie", label: "Facturatie",     icon: Icon.Facturatie },
       { href: "/admin/rapportages",label: "Rapportages",    icon: Icon.Rapportages },
       { href: "/admin/taken",      label: "Taken",          icon: Icon.Taken },
@@ -135,9 +138,6 @@ const navGroups: NavGroup[] = [
 const kandidatenSubLinks: NavLink[] = [
   { href: "/admin/candidates",          label: "Overzicht",  icon: Icon.Kandidaten },
   { href: "/admin/candidates/pipeline", label: "Pipeline",   icon: Icon.Pipeline },
-  { href: "/admin/pipeline/permanent",  label: "Permanent",  icon: Icon.Pipeline },
-  { href: "/admin/pipeline/interim",    label: "Interim",    icon: Icon.Pipeline },
-  { href: "/admin/pipeline/project",    label: "Project",    icon: Icon.Pipeline },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ export default function AdminSidebar({ userName }: { userName?: string }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [kandidatenOpen, setKandidatenOpen] = useState(
-    pathname.startsWith("/admin/candidates") || pathname.startsWith("/admin/pipeline")
+    pathname.startsWith("/admin/candidates")
   );
 
   const isActive = (href: string) => {
@@ -186,7 +186,7 @@ export default function AdminSidebar({ userName }: { userName?: string }) {
         </div>
         {!collapsed && (
           <span className="font-heading text-sm font-bold text-heading">
-            {userName || "Radical Portal"}
+            {userName || "Radical Network"}
           </span>
         )}
       </div>

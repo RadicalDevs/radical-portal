@@ -12,9 +12,10 @@ import {
 import { DIMENSION_LABELS, DIMENSION_COLORS } from "@/lib/apac/scoring";
 import type { ApacDimension } from "@/lib/apac/types";
 import AnimatedSection from "./AnimatedSection";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
+import { translations } from "@/lib/i18n/translations";
 
-// Demo-only illustrative scores (0-10 schaal voor visuele eenvoud).
-// Echte APAC scores gebruiken totaalpunten per dimensie (bijv. max ~50 elk).
+// Demo-only illustrative scores (0-10 scale for visual simplicity).
 const BASE_SCORES = {
   adaptability: 8.5,
   personality: 7.8,
@@ -22,57 +23,35 @@ const BASE_SCORES = {
   connection: 8.1,
 };
 
-const DIMENSION_INFO: Record<
-  ApacDimension,
-  { tagline: string; description: string; icon: React.ReactElement }
-> = {
-  adaptability: {
-    tagline: "Flexibiliteit in een veranderende wereld",
-    description:
-      "Hoe snel pas jij je aan? In de AI-sector is de halfwaardetijd van kennis maanden. Adaptability meet je vermogen om verouderde methodes los te laten en op verschillende abstractieniveaus te schakelen.",
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-      </svg>
-    ),
-  },
-  personality: {
-    tagline: "Authenticiteit als krachtigste instrument",
-    description:
-      "De Prompt Engineer van de Ziel. Personality meet analytisch vermogen, creativiteit, nieuwsgierigheid en growth mindset. Durf jij voorbij de data te kijken?",
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-      </svg>
-    ),
-  },
-  awareness: {
-    tagline: "Het morele kompas van AI",
-    description:
-      "Awareness meet je EQ, contextuele intelligentie en ethisch bewustzijn. Durf jij 'nee' te zeggen tegen onethische oplossingen? Cruciaal voor EU AI Act compliance.",
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      </svg>
-    ),
-  },
-  connection: {
-    tagline: "De menselijke verbinding wordt steeds zeldzamer",
-    description:
-      "Connection meet je sociale verbinding met jezelf, de maatschappij en je community. Zelfreflectie, teamverbinding en inherent risicobewustzijn. Een Radical in een team is een ethische vangrail.",
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-      </svg>
-    ),
-  },
+const DIMENSION_ICONS: Record<ApacDimension, React.ReactElement> = {
+  adaptability: (
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+    </svg>
+  ),
+  personality: (
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+    </svg>
+  ),
+  awareness: (
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  ),
+  connection: (
+    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+    </svg>
+  ),
 };
 
 const DIMENSIONS: ApacDimension[] = ["adaptability", "personality", "awareness", "connection"];
 
 export default function InteractiveRadarDemo() {
   const [active, setActive] = useState<ApacDimension | null>(null);
+  const { lang, t } = useLanguage();
 
   const displayScores = useMemo(() => {
     if (!active) return BASE_SCORES;
@@ -87,6 +66,25 @@ export default function InteractiveRadarDemo() {
     return result;
   }, [active]);
 
+  const dimensionInfo = useMemo(() => ({
+    adaptability: {
+      tagline: translations[lang].dim_adaptability_tagline,
+      description: translations[lang].dim_adaptability_desc,
+    },
+    personality: {
+      tagline: translations[lang].dim_personality_tagline,
+      description: translations[lang].dim_personality_desc,
+    },
+    awareness: {
+      tagline: translations[lang].dim_awareness_tagline,
+      description: translations[lang].dim_awareness_desc,
+    },
+    connection: {
+      tagline: translations[lang].dim_connection_tagline,
+      description: translations[lang].dim_connection_desc,
+    },
+  }), [lang]);
+
   const chartData = DIMENSIONS.map((dim) => ({
     dimension: DIMENSION_LABELS[dim],
     score: displayScores[dim],
@@ -94,17 +92,18 @@ export default function InteractiveRadarDemo() {
   }));
 
   const activeColor = active ? DIMENSION_COLORS[active] : "#2ed573";
-  const activeInfo = active ? DIMENSION_INFO[active] : null;
+  const activeInfo = active ? dimensionInfo[active] : null;
 
   return (
     <section className="px-4 py-24 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <AnimatedSection className="text-center">
           <h2 className="font-heading text-3xl font-bold text-heading sm:text-4xl lg:text-5xl">
-            Het <span className="gradient-text">APAC</span> Framework
+            {t("radar_title_pre")} <span className="gradient-text">APAC</span>{" "}
+            {t("radar_title_post")}
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-muted">
-            Vier dimensies die zichtbaar maken wat jou als mens bijzonder maakt.
+            {t("radar_subtitle")}
           </p>
         </AnimatedSection>
 
@@ -151,7 +150,7 @@ export default function InteractiveRadarDemo() {
               {/* Dimension buttons */}
               <div className="grid grid-cols-2 gap-3">
                 {DIMENSIONS.map((dim) => {
-                  const info = DIMENSION_INFO[dim];
+                  const info = dimensionInfo[dim];
                   const isActive = active === dim;
                   const color = DIMENSION_COLORS[dim];
                   return (
@@ -174,7 +173,7 @@ export default function InteractiveRadarDemo() {
                           className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors"
                           style={{ background: `${color}18`, color }}
                         >
-                          {info.icon}
+                          {DIMENSION_ICONS[dim]}
                         </div>
                         <div>
                           <p className="font-heading font-bold text-heading text-sm">
@@ -220,8 +219,8 @@ export default function InteractiveRadarDemo() {
                       className="glass rounded-xl p-5"
                     >
                       <p className="text-sm text-muted">
-                        <span className="text-smaragd font-medium">Hover</span> over een dimensie
-                        om te ontdekken wat we meten en waarom het ertoe doet.
+                        <span className="text-smaragd font-medium">Hover</span>{" "}
+                        {t("radar_hover_hint")}
                       </p>
                     </motion.div>
                   )}

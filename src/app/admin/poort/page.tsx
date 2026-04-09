@@ -3,7 +3,7 @@ import PoortClient from "./PoortClient";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "De Poort — Radical Portal" };
+export const metadata = { title: "De Poort — Radical Network" };
 
 export default async function AdminPoortPage() {
   const data = await getPoortPageData();

@@ -177,6 +177,11 @@ function QuestionRow({
           <span className="text-xs text-muted">
             {question.options.length} opties
           </span>
+          {question.is_veto && (
+            <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-[11px] font-semibold text-red-400">
+              Veto
+            </span>
+          )}
           {!question.is_active && (
             <span className="rounded-full bg-surface-light px-2 py-0.5 text-xs text-muted">
               Inactief
@@ -227,9 +232,13 @@ function QuestionEditor({
     question ? JSON.stringify(question.options, null, 2) : DEFAULT_OPTIONS
   );
   const [isActive, setIsActive] = useState(question?.is_active ?? true);
+  const [isVeto, setIsVeto] = useState(question?.is_veto ?? false);
+  const [options, setOptions] = useState<{ label: string; value: number; is_veto_fout?: boolean }[]>(
+    question ? question.options : JSON.parse(DEFAULT_OPTIONS)
+  );
   const [optionsError, setOptionsError] = useState<string | null>(null);
 
-  function validateOptions(raw: string): { label: string; value: number }[] | null {
+  function validateOptions(raw: string): { label: string; value: number; is_veto_fout?: boolean }[] | null {
     try {
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return null;
@@ -251,9 +260,16 @@ function QuestionEditor({
     }
     setOptionsError(null);
 
+    // Merge is_veto_fout from the options state into the validated JSON options
+    const mergedOpts = opts.map((opt, idx) => {
+      const vetoFout = options[idx]?.is_veto_fout;
+      return vetoFout ? { ...opt, is_veto_fout: true } : opt;
+    });
+
     const fd = new FormData(e.currentTarget);
-    fd.set("options", JSON.stringify(opts));
+    fd.set("options", JSON.stringify(mergedOpts));
     fd.set("is_active", String(isActive));
+    fd.set("is_veto", String(isVeto));
 
     startTransition(async () => {
       let result: QuestionMutationResult;
@@ -273,11 +289,12 @@ function QuestionEditor({
       const updated: AdminApacQuestion = {
         id: question?.id ?? crypto.randomUUID(),
         question_text: fd.get("question_text") as string,
-        options: opts,
+        options: mergedOpts,
         variable: fd.get("variable") as string,
         weight: Number(fd.get("weight")),
         sort_order: question?.sort_order ?? 999,
         is_active: isActive,
+        is_veto: isVeto,
         tally_field_id: tallyFieldRaw && String(tallyFieldRaw).trim() ? String(tallyFieldRaw).trim() : null,
       };
       onSaved(updated);
@@ -387,6 +404,41 @@ function QuestionEditor({
         </p>
       </div>
 
+      {/* Veto configuratie */}
+      <div className="rounded-lg border border-surface-border bg-surface-light/40 p-4 space-y-3">
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-label">
+          <input
+            type="checkbox"
+            checked={isVeto}
+            onChange={(e) => setIsVeto(e.target.checked)}
+            className="rounded accent-red-500"
+          />
+          <span>Veto vraag</span>
+          <span className="text-xs text-muted font-normal">&mdash; rode vlag als antwoord fout</span>
+        </label>
+        {isVeto && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted">Markeer welke antwoorden &apos;fout&apos; zijn (triggeren veto):</p>
+            {options.map((opt, idx) => (
+              <label key={idx} className="flex items-center gap-2 text-sm text-body cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={opt.is_veto_fout === true}
+                  onChange={(e) => {
+                    const updated = [...options];
+                    updated[idx] = { ...updated[idx], is_veto_fout: e.target.checked || undefined };
+                    setOptions(updated);
+                  }}
+                  className="rounded accent-red-500"
+                />
+                <span className={opt.is_veto_fout ? "text-red-400 font-medium" : ""}>{opt.label}</span>
+                <span className="text-xs text-muted">({opt.value} punten)</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Options JSON */}
       <div>
         <label className="mb-1 block text-sm font-medium text-label">
@@ -394,7 +446,12 @@ function QuestionEditor({
         </label>
         <textarea
           value={optionsRaw}
-          onChange={(e) => { setOptionsRaw(e.target.value); setOptionsError(null); }}
+          onChange={(e) => {
+            setOptionsRaw(e.target.value);
+            setOptionsError(null);
+            const parsed = validateOptions(e.target.value);
+            if (parsed) setOptions(parsed);
+          }}
           rows={8}
           className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 font-mono text-xs text-body focus:border-smaragd focus:outline-none resize-y"
           placeholder='[{"label": "Optie", "value": 5}]'

@@ -5,7 +5,7 @@ import DashboardClient from "./DashboardClient";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Dashboard — Radical Portal",
+  title: "Dashboard — Radical Network",
 };
 
 export default async function DashboardPage() {

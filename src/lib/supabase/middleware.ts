@@ -15,7 +15,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 
 // Routes that don't require authentication
-const PUBLIC_PATHS = ["/", "/apac", "/auth", "/api/webhooks"];
+const PUBLIC_PATHS = ["/", "/apac", "/auth", "/api/webhooks", "/api/cron"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
@@ -62,12 +62,16 @@ export async function updateSession(request: NextRequest) {
     );
     const { data: portalUser } = await serviceClient
       .from("portal_users")
-      .select("role")
+      .select("role, email_verified")
       .eq("auth_user_id", user.id)
       .single();
 
     const url = request.nextUrl.clone();
-    url.pathname = portalUser?.role === "admin" ? "/admin" : "/dashboard";
+    if (portalUser && !portalUser.email_verified && portalUser.role !== "admin") {
+      url.pathname = "/auth/verify";
+    } else {
+      url.pathname = portalUser?.role === "admin" ? "/admin" : "/dashboard";
+    }
     return NextResponse.redirect(url);
   }
 
@@ -95,7 +99,7 @@ export async function updateSession(request: NextRequest) {
 
   const { data: portalUser } = await serviceClient
     .from("portal_users")
-    .select("role")
+    .select("role, email_verified")
     .eq("auth_user_id", user.id)
     .single();
 
@@ -103,6 +107,13 @@ export async function updateSession(request: NextRequest) {
   if (!portalUser) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Email niet geverifieerd → redirect naar verify pagina
+  if (!portalUser.email_verified && portalUser.role !== "admin") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/verify";
     return NextResponse.redirect(url);
   }
 

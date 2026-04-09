@@ -6,14 +6,8 @@ import RadarChart from "@/components/apac/RadarChart";
 import ProfileModal from "@/components/profile/ProfileModal";
 import { useRealtimeApac } from "@/hooks/useRealtimeApac";
 import { calculateCombinedScore, calculateCombinedMax, scoreToPercentage } from "@/lib/apac/scoring";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 import type { DashboardData } from "./actions";
-
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  prospect:   { label: "Aangemeld",    color: "text-muted",   bg: "bg-surface-light" },
-  in_selectie:{ label: "In selectie",  color: "text-coral",   bg: "bg-coral/10" },
-  radical:    { label: "Radical Pool", color: "text-smaragd", bg: "bg-smaragd/10" },
-  alumni:     { label: "Alumni",       color: "text-muted",   bg: "bg-surface-light" },
-};
 
 const DIMENSIONS = [
   { key: "adaptability" as const, label: "Adaptability", color: "#2ed573" },
@@ -22,58 +16,66 @@ const DIMENSIONS = [
   { key: "connection"   as const, label: "Connection",    color: "#8B5CF6" },
 ];
 
-const QUICK_LINKS = [
-  {
-    href: "/dashboard/results",
-    title: "Volledige resultaten",
-    description: "Bekijk je uitgebreide APAC-analyse",
-    color: "#2ed573",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-      </svg>
-    ),
-  },
-  {
-    href: "/dashboard/support",
-    title: "Gesprek met Nelieke",
-    description: "Plan een persoonlijk coachgesprek",
-    color: "#E6734F",
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
-      </svg>
-    ),
-  },
-  {
-    href: "#",
-    title: "Community",
-    description: "Verbind met andere AI-professionals",
-    color: "#8B5CF6",
-    comingSoon: true,
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-      </svg>
-    ),
-  },
-  {
-    href: "#",
-    title: "Evenementen",
-    description: "Workshops en meetups",
-    color: "#F59E0B",
-    comingSoon: true,
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-      </svg>
-    ),
-  },
-];
-
 export default function DashboardClient({ data, scoreRevealed }: { data: DashboardData; scoreRevealed: boolean }) {
+  const { t } = useLanguage();
   const liveScores = useRealtimeApac(data.user.kandidaatId, data.scores);
   const [profileOpen, setProfileOpen] = useState(data.kandidaat.isFirstLogin);
+
+  const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
+    prospect:   { label: t("dash_status_prospect"), color: "text-muted",   bg: "bg-surface-light" },
+    in_selectie:{ label: t("dash_status_in_selectie"), color: "text-coral",   bg: "bg-coral/10" },
+    radical:    { label: t("dash_status_radical"), color: "text-smaragd", bg: "bg-smaragd/10" },
+    alumni:     { label: t("dash_status_alumni"), color: "text-muted",   bg: "bg-surface-light" },
+  };
+
+  const quickLinks = [
+    {
+      href: "/dashboard/results",
+      title: t("dash_link_results"),
+      description: t("dash_link_results_desc"),
+      color: "#2ed573",
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+        </svg>
+      ),
+    },
+    {
+      href: "/dashboard/support",
+      title: t("dash_link_coaching"),
+      description: t("dash_link_coaching_desc"),
+      color: "#E6734F",
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
+        </svg>
+      ),
+    },
+    {
+      href: "#",
+      title: t("dash_link_community"),
+      description: t("dash_link_community_desc"),
+      color: "#8B5CF6",
+      comingSoon: true,
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+        </svg>
+      ),
+    },
+    {
+      href: "#",
+      title: t("dash_link_events"),
+      description: t("dash_link_events_desc"),
+      color: "#F59E0B",
+      comingSoon: true,
+      icon: (
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-8">
@@ -97,11 +99,10 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-heading">
-              Maak je profiel compleet
+              {t("dash_complete_profile")}
             </p>
             <p className="text-xs text-muted">
-              Voeg je vaardigheden en beschikbaarheid toe en vergeet je CV niet
-              te uploaden zodat wij nog betere inzichten over jou hebben.
+              {t("dash_complete_profile_desc")}
             </p>
           </div>
           <svg className="h-5 w-5 shrink-0 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -113,10 +114,10 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
       {/* Header */}
       <div>
         <h1 className="font-heading text-3xl font-bold text-heading sm:text-4xl">
-          Welkom, <span className="gradient-text-warm">{data.user.firstName}</span>
+          {t("dash_welcome")} <span className="gradient-text-warm">{data.user.firstName}</span>
         </h1>
         <p className="mt-1 text-body">
-          Jouw persoonlijke dashboard.
+          {t("dash_your_dashboard")}
         </p>
       </div>
 
@@ -137,7 +138,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
               {/* Badge */}
               <span className="inline-flex items-center gap-1.5 rounded-full bg-smaragd/10 px-3 py-1 text-xs font-semibold text-smaragd">
                 <span className="h-1.5 w-1.5 rounded-full bg-smaragd animate-pulse" />
-                APAC Assessment voltooid
+                {t("dash_apac_completed")}
               </span>
 
               {/* Mystery score */}
@@ -148,16 +149,16 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
               </div>
 
               <h3 className="mt-4 font-heading text-2xl font-bold text-heading sm:text-3xl">
-                Je score is klaar
+                {t("dash_score_ready")}
               </h3>
               <p className="mx-auto mt-2 max-w-md text-muted">
-                We hebben je geanalyseerd op Adaptability, Personality, Awareness en Connection. Ontdek nu wat jou als mens bijzonder maakt.
+                {t("dash_score_ready_desc")}
               </p>
 
               {/* CTA button */}
               <div className="mt-6">
                 <span className="inline-flex items-center gap-2 rounded-2xl bg-smaragd px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all group-hover:bg-smaragd-dark group-hover:shadow-[0_0_40px_rgba(46,213,115,0.4)] group-hover:-translate-y-0.5 animate-shimmer">
-                  Onthul je resultaten
+                  {t("dash_reveal_results")}
                   <svg className="h-5 w-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                   </svg>
@@ -181,9 +182,9 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
             <div className="relative flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-smaragd/10 px-3 py-1 text-xs font-semibold text-smaragd">
                 <span className="h-1.5 w-1.5 rounded-full bg-smaragd animate-pulse" />
-                APAC Resultaten
+                {t("dash_apac_results")}
               </span>
-              <span className="text-xs text-muted">Klik voor je volledige analyse</span>
+              <span className="text-xs text-muted">{t("dash_click_full_analysis")}</span>
             </div>
 
             <div className="relative mt-6 grid items-center gap-6 lg:grid-cols-[240px_1fr]">
@@ -202,7 +203,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
                   {data.maxScores && (
                     <span className="text-lg text-muted">/{calculateCombinedMax(data.maxScores)}</span>
                   )}
-                  <span className="text-sm text-muted">punten</span>
+                  <span className="text-sm text-muted">{t("dash_points")}</span>
                 </div>
 
                 {/* Mini score bars */}
@@ -230,7 +231,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
                 {/* CTA */}
                 <div className="mt-6 flex items-center gap-3">
                   <span className="inline-flex items-center gap-2 rounded-xl bg-smaragd px-5 py-2.5 text-sm font-semibold text-white transition-all group-hover:bg-smaragd-dark group-hover:shadow-[0_0_24px_rgba(46,213,115,0.3)]">
-                    Bekijk je volledige resultaten
+                    {t("dash_view_full_results")}
                     <svg className="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                     </svg>
@@ -251,16 +252,16 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
                 </svg>
               </div>
               <h3 className="mt-4 font-heading text-xl font-bold text-heading">
-                Ontdek je menselijke kwaliteiten
+                {t("dash_discover_qualities")}
               </h3>
               <p className="mt-2 text-sm text-muted">
-                Start de APAC-test en ontvang je persoonlijke profiel.
+                {t("dash_start_apac_desc")}
               </p>
               <Link
                 href="/apac"
                 className="mt-5 inline-flex items-center gap-2 rounded-xl bg-smaragd px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-smaragd-dark hover:shadow-[0_0_24px_rgba(46,213,115,0.3)]"
               >
-                Start de test
+                {t("dash_start_test")}
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>
@@ -273,7 +274,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
       {/* Profile snapshot */}
       <div className="glass rounded-2xl p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-heading text-lg font-bold text-heading">Jouw profiel</h2>
+          <h2 className="font-heading text-lg font-bold text-heading">{t("dash_your_profile")}</h2>
           <button
             onClick={() => setProfileOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-smaragd/10 px-3.5 py-1.5 text-sm font-medium text-smaragd transition-all hover:bg-smaragd/20"
@@ -281,36 +282,36 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
             </svg>
-            Bewerken
+            {t("dash_edit")}
           </button>
         </div>
 
         {/* Quick info grid */}
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <ProfileField
-            label="Beschikbaarheid"
+            label={t("dash_availability")}
             value={
-              data.kandidaat.profile.beschikbaarheid === true ? "Beschikbaar" :
-              data.kandidaat.profile.beschikbaarheid === false ? "Niet beschikbaar" : null
+              data.kandidaat.profile.beschikbaarheid === true ? t("dash_available") :
+              data.kandidaat.profile.beschikbaarheid === false ? t("dash_not_available") : null
             }
             color={data.kandidaat.profile.beschikbaarheid === true ? "#2ed573" : undefined}
           />
-          <ProfileField label="Telefoon" value={data.kandidaat.profile.telefoon} />
+          <ProfileField label={t("dash_phone")} value={data.kandidaat.profile.telefoon} />
           <ProfileField
-            label="LinkedIn"
-            value={data.kandidaat.profile.linkedin_url ? "Ingevuld" : null}
+            label={t("dash_linkedin")}
+            value={data.kandidaat.profile.linkedin_url ? t("dash_filled_in") : null}
             color={data.kandidaat.profile.linkedin_url ? "#3B82F6" : undefined}
           />
           <ProfileField
-            label="CV"
-            value={data.kandidaat.profile.cv_url ? "Geüpload" : null}
+            label={t("dash_cv")}
+            value={data.kandidaat.profile.cv_url ? t("dash_uploaded") : null}
             color={data.kandidaat.profile.cv_url ? "#2ed573" : undefined}
           />
         </div>
 
         {/* Skills */}
         <div className="mt-4">
-          <p className="text-xs font-medium text-muted">Vaardigheden</p>
+          <p className="text-xs font-medium text-muted">{t("dash_skills")}</p>
           {data.kandidaat.profile.vaardigheden.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {data.kandidaat.profile.vaardigheden.map((skill) => (
@@ -327,7 +328,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              Voeg je skills toe
+              {t("dash_add_skills")}
             </button>
           )}
         </div>
@@ -335,7 +336,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
 
       {/* Quick links */}
       <div className="grid gap-3 sm:grid-cols-2">
-        {QUICK_LINKS.map((link) => (
+        {quickLinks.map((link) => (
           <Link
             key={link.title}
             href={link.href}
@@ -357,7 +358,7 @@ export default function DashboardClient({ data, scoreRevealed }: { data: Dashboa
                 <h3 className="font-heading font-bold text-heading">{link.title}</h3>
                 {link.comingSoon && (
                   <span className="shrink-0 rounded-full bg-surface-light px-2 py-0.5 text-[10px] font-medium text-muted">
-                    Binnenkort
+                    {t("dash_coming_soon")}
                   </span>
                 )}
               </div>

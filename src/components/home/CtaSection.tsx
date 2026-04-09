@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import AnimatedSection from "./AnimatedSection";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 export default function CtaSection() {
+  const { t } = useLanguage();
+
   return (
     <section className="px-4 py-24 sm:px-8">
       <div className="mx-auto max-w-3xl">
@@ -14,13 +17,13 @@ export default function CtaSection() {
 
             <div className="relative">
               <h2 className="font-heading text-3xl font-bold text-heading sm:text-4xl">
-                Klaar om je menselijke{" "}
-                <span className="gradient-text">kwaliteiten</span> te ontdekken?
+                {t("cta_title_pre")}{" "}
+                <span className="gradient-text">{t("cta_title_accent")}</span>
+                {t("cta_title_post")}
               </h2>
 
               <p className="mx-auto mt-4 max-w-lg text-muted">
-                De APAC-test duurt 20 minuten en laat zien wat jou als mens
-                bijzonder maakt. Gratis, persoonlijk en zonder verplichtingen.
+                {t("cta_desc")}
               </p>
 
               <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
@@ -28,7 +31,7 @@ export default function CtaSection() {
                   href="/apac"
                   className="group inline-flex items-center gap-2 rounded-2xl bg-smaragd px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all duration-300 hover:bg-smaragd-dark hover:shadow-[0_0_40px_rgba(46,213,115,0.4)] hover:-translate-y-1 animate-shimmer"
                 >
-                  Start de APAC-test
+                  {t("cta_primary")}
                   <svg
                     className="h-5 w-5 transition-transform group-hover:translate-x-1"
                     fill="none"
@@ -47,7 +50,7 @@ export default function CtaSection() {
                   href="/auth/register"
                   className="text-sm font-medium text-muted transition-colors hover:text-smaragd"
                 >
-                  Of maak eerst een account aan
+                  {t("cta_secondary")}
                 </Link>
               </div>
             </div>

@@ -1,7 +1,8 @@
+import { Suspense } from "react";
 import LoginClient from "./LoginClient";
 
 export const metadata = {
-  title: "Inloggen — Radical Portal",
+  title: "Inloggen — Radical Network",
 };
 
 export default function LoginPage() {
@@ -15,17 +16,9 @@ export default function LoginPage() {
       {/* Card */}
       <div className="relative w-full max-w-sm">
         <div className="glass rounded-2xl p-8 shadow-xl">
-          <div className="text-center">
-            <p className="font-heading text-2xl font-bold">
-              Radical<span className="gradient-text">Portal</span>
-            </p>
-            <h1 className="mt-3 font-heading text-xl font-bold text-heading">
-              Welkom terug
-            </h1>
-            <p className="mt-1 text-sm text-muted">Log in op je account</p>
-          </div>
-
-          <LoginClient />
+          <Suspense fallback={null}>
+            <LoginClient />
+          </Suspense>
         </div>
       </div>
     </main>

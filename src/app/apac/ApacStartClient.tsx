@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Turnstile } from "@marsidev/react-turnstile";
 import { createApacSession } from "./actions";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
@@ -11,12 +12,26 @@ export default function ApacStartClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source") || "website";
+  const { t } = useLanguage();
 
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [captchaFailed, setCaptchaFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Fallback: als Turnstile niet laadt (ad blocker), ontgrendel knop na 3s
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY) return;
+    const timer = setTimeout(() => {
+      setTurnstileToken((current) => {
+        if (!current) setCaptchaFailed(true);
+        return current;
+      });
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const canStart =
     firstName.trim().length > 0 &&
@@ -27,7 +42,11 @@ export default function ApacStartClient() {
     e.preventDefault();
     setError(null);
 
-    const token = turnstileToken || "dev-bypass";
+    if (!turnstileToken && TURNSTILE_SITE_KEY && !captchaFailed) {
+      setError(t("apac_form_captcha_error"));
+      return;
+    }
+    const token = turnstileToken || "";
 
     startTransition(async () => {
       const formData = new FormData();
@@ -58,10 +77,9 @@ export default function ApacStartClient() {
 
   return (
     <form onSubmit={handleStart} className="mt-8 space-y-4">
-      {/* Name + Email — snel en simpel */}
       <div>
         <label htmlFor="firstName" className="block text-sm font-medium text-label">
-          Voornaam
+          {t("apac_form_firstname")}
         </label>
         <input
           id="firstName"
@@ -70,14 +88,14 @@ export default function ApacStartClient() {
           autoComplete="given-name"
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
-          placeholder="Je voornaam"
+          placeholder={t("apac_form_firstname_placeholder")}
           className="mt-1 block w-full rounded-[8px] border border-surface-border bg-surface px-4 py-2.5 text-heading placeholder-muted focus:border-smaragd focus:ring-1 focus:ring-smaragd"
         />
       </div>
 
       <div>
         <label htmlFor="email" className="block text-sm font-medium text-label">
-          E-mailadres
+          {t("apac_form_email")}
         </label>
         <input
           id="email"
@@ -86,11 +104,11 @@ export default function ApacStartClient() {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="jouw@email.nl"
+          placeholder="your@email.com"
           className="mt-1 block w-full rounded-[8px] border border-surface-border bg-surface px-4 py-2.5 text-heading placeholder-muted focus:border-smaragd focus:ring-1 focus:ring-smaragd"
         />
         <p className="mt-1 text-xs text-muted">
-          We sturen je resultaten naar dit adres.
+          {t("apac_form_email_hint")}
         </p>
       </div>
 
@@ -100,7 +118,7 @@ export default function ApacStartClient() {
           <Turnstile
             siteKey={TURNSTILE_SITE_KEY}
             onSuccess={(token) => setTurnstileToken(token)}
-            onError={() => setError("Captcha laden mislukt. Ververs de pagina.")}
+            onError={() => { setCaptchaFailed(true); }}
             options={{ theme: "dark", size: "normal" }}
           />
         </div>
@@ -115,7 +133,7 @@ export default function ApacStartClient() {
         disabled={
           isPending ||
           !canStart ||
-          (TURNSTILE_SITE_KEY !== "" && !turnstileToken)
+          (TURNSTILE_SITE_KEY !== "" && !turnstileToken && !captchaFailed)
         }
         className="flex w-full items-center justify-center rounded-[8px] bg-smaragd px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:bg-smaragd-dark hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -125,10 +143,10 @@ export default function ApacStartClient() {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
             </svg>
-            Even geduld…
+            {t("apac_form_waiting")}
           </span>
         ) : (
-          "Start de test"
+          t("apac_form_submit")
         )}
       </button>
     </form>

@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 import RadarChart from "@/components/apac/RadarChart";
 import { useRealtimeApac } from "@/hooks/useRealtimeApac";
 import { calculateCombinedScore, calculateCombinedMax, scoreToPercentage, DIMENSION_LABELS, DIMENSION_COLORS } from "@/lib/apac/scoring";
@@ -17,44 +18,6 @@ interface Props {
   initialScores: ApacScores;
   maxScores: ApacMaxScores;
   articles: Article[];
-}
-
-const DIMENSION_INSIGHTS: Record<
-  ApacDimension,
-  { title: string; high: string; mid: string; low: string }
-> = {
-  adaptability: {
-    title: "Wat zegt je Adaptability over jou als professional?",
-    high: "Je bent uitzonderlijk flexibel en veerkrachtig. In een sector die continu verandert, ben jij degene die moeiteloos meebeweegt. Je omarmt verandering niet alleen — je bloeit erin op. Voor werkgevers betekent dit dat je snel inzetbaar bent in wisselende projecten en technologieën.",
-    mid: "Je kunt je goed aanpassen aan verandering, al kost het soms even moeite. Je hebt de basis om in een dynamische omgeving te floreren. Overweeg om jezelf vaker bloot te stellen aan nieuwe situaties — elk oncomfortabel moment bouwt aan je veerkracht.",
-    low: "Verandering kan je onzeker maken, en dat is menselijk. De AI-sector vraagt veel flexibiliteit, maar het goede nieuws is dat aanpassingsvermogen een vaardigheid is die je kunt ontwikkelen. Begin klein: probeer elke week één ding anders te doen in je workflow.",
-  },
-  personality: {
-    title: "Wat zegt je Personality over wie je bent?",
-    high: "Je persoonlijkheid is een krachtig instrument. Je weet wie je bent, je staat stevig in je schoenen en je durft jezelf te laten zien. Dat is precies wat teams nodig hebben in de AI-wereld — authentieke professionals die hun visie durven delen.",
-    mid: "Je hebt een herkenbare persoonlijkheid die je in veel situaties goed inzet. Er is ruimte om je nog meer te profileren. Durf vaker je mening te geven in meetings en je unieke perspectief te delen — dat is wat je onderscheidt van AI.",
-    low: "Je persoonlijkheid is er, maar komt nog niet altijd volledig tot uiting. In de AI-sector telt authenticiteit. Vraag jezelf af: wat maakt mij uniek als mens en professional? Die kern is je grootste kracht.",
-  },
-  awareness: {
-    title: "Wat zegt je Awareness over je bewustzijn?",
-    high: "Je bewustzijn is opvallend sterk. Je bent reflectief, begrijpt de bredere context en ziet de impact van technologie op mens en maatschappij. Dat maakt je een waardevolle stem in elke AI-discussie en een ethisch kompas voor teams.",
-    mid: "Je hebt een goed ontwikkeld bewustzijn van je omgeving en de bredere impact van je werk. Verdiep dit door regelmatig te reflecteren op de ethische implicaties van de technologie waar je mee werkt.",
-    low: "Er is ruimte om je bewustzijn te verbreden — zowel zelfbewustzijn als bewustzijn van de ethische context van AI. Overweeg een boek over AI-ethiek, of voer een gesprek met Nelieke over hoe je hier bewuster mee om kunt gaan.",
-  },
-  connection: {
-    title: "Wat zegt je Connection over hoe je verbindt?",
-    high: "Je vermogen om verbindingen te maken is uitzonderlijk. Je bouwt bruggen tussen mensen, ideeën en disciplines. In een wereld waar AI dreigt te isoleren, ben jij de verbinder. Dat is zeldzaam en ongelooflijk waardevol.",
-    mid: "Je kunt goed verbinden met anderen en bouwt zinvolle relaties op. Om dit naar een hoger niveau te tillen: probeer actief mensen uit verschillende disciplines samen te brengen. Jij kunt de brug zijn.",
-    low: "Verbinding maken kan uitdagend zijn, zeker in een technisch veld. Maar juist de menselijke connectie wordt steeds waardevoller naarmate AI meer taken overneemt. Begin met één gesprek per week dat je normaal niet zou voeren.",
-  },
-};
-
-function getInsight(dim: ApacDimension, score: number, maxScore: number): string {
-  const insights = DIMENSION_INSIGHTS[dim];
-  const pct = maxScore > 0 ? score / maxScore : 0;
-  if (pct >= 0.75) return insights.high;
-  if (pct >= 0.50) return insights.mid;
-  return insights.low;
 }
 
 // Animated score counter (points format: "35/50")
@@ -152,9 +115,48 @@ export default function ResultsClient({
   maxScores,
   articles,
 }: Props) {
+  const { t } = useLanguage();
   const scores = useRealtimeApac(kandidaatId, initialScores);
   const [splashDone, setSplashDone] = useState(false);
   const [splashStage, setSplashStage] = useState(0);
+
+  const DIMENSION_INSIGHTS: Record<
+    ApacDimension,
+    { title: string; high: string; mid: string; low: string }
+  > = {
+    adaptability: {
+      title: t("results_adapt_title"),
+      high: t("results_adapt_high"),
+      mid: t("results_adapt_mid"),
+      low: t("results_adapt_low"),
+    },
+    personality: {
+      title: t("results_person_title"),
+      high: t("results_person_high"),
+      mid: t("results_person_mid"),
+      low: t("results_person_low"),
+    },
+    awareness: {
+      title: t("results_aware_title"),
+      high: t("results_aware_high"),
+      mid: t("results_aware_mid"),
+      low: t("results_aware_low"),
+    },
+    connection: {
+      title: t("results_connect_title"),
+      high: t("results_connect_high"),
+      mid: t("results_connect_mid"),
+      low: t("results_connect_low"),
+    },
+  };
+
+  function getInsight(dim: ApacDimension, score: number, maxScore: number): string {
+    const insights = DIMENSION_INSIGHTS[dim];
+    const pct = maxScore > 0 ? score / maxScore : 0;
+    if (pct >= 0.75) return insights.high;
+    if (pct >= 0.50) return insights.mid;
+    return insights.low;
+  }
 
   const combined = scores ? calculateCombinedScore(scores) : 0;
   const combinedMax = calculateCombinedMax(maxScores);
@@ -327,8 +329,8 @@ export default function ResultsClient({
         {/* ═══ Scene 1: Intro + dimension names ═══ */}
         {scene === 1 && (
           <motion.div key="s1" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0 }}>
-            <p className="text-xs font-medium tracking-[0.25em] uppercase text-muted/60">APAC Assessment voltooid</p>
-            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0, delay: 0.3 }} className="mt-5 font-heading text-xl font-bold text-heading sm:text-2xl">We hebben je geanalyseerd op vier dimensies</motion.p>
+            <p className="text-xs font-medium tracking-[0.25em] uppercase text-muted/60">{t("results_splash_completed")}</p>
+            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0, delay: 0.3 }} className="mt-5 font-heading text-xl font-bold text-heading sm:text-2xl">{t("results_splash_analyzed")}</motion.p>
             {splashStage >= 3 && (
               <div className="mt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-6">
                 {DIMENSIONS.map((dim, i) => (
@@ -345,7 +347,7 @@ export default function ResultsClient({
         {/* ═══ Scene 2: Dimension bars (individual scores — NO combined score yet) ═══ */}
         {scene === 2 && (
           <motion.div key="s2" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 25 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.0 }}>
-            <p className="mb-8 text-sm font-semibold uppercase tracking-[0.2em] text-smaragd">Je dimensies in detail</p>
+            <p className="mb-8 text-sm font-semibold uppercase tracking-[0.2em] text-smaragd">{t("results_splash_dimensions")}</p>
             <div className="grid w-full max-w-lg grid-cols-1 gap-y-5 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-6">
               {DIMENSIONS.map((dim, i) => {
                 const dimPct = scoreToPercentage(scores[dim.key], maxScores[dim.key]);
@@ -375,7 +377,7 @@ export default function ResultsClient({
           <motion.div key="s3" className="relative z-10 flex flex-col items-center px-6 text-center" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1.2 }}>
             <motion.div className="h-px bg-gradient-to-r from-transparent via-smaragd/30 to-transparent" initial={{ width: 0 }} animate={{ width: 80 }} transition={{ duration: 1.0 }} />
             <p className="mt-8 font-heading text-2xl italic text-heading/80 leading-relaxed sm:text-3xl">&ldquo;AI is everywhere.<br />The human factor is rare.&rdquo;</p>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 1.0 }} className="mt-5 text-sm text-muted">Je bent meer dan een CV.</motion.p>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 1.0 }} className="mt-5 text-sm text-muted">{t("results_splash_more_than_cv")}</motion.p>
           </motion.div>
         )}
 
@@ -388,7 +390,7 @@ export default function ResultsClient({
               transition={{ duration: 2.0, ease: "easeOut" }}
               className="text-xs font-medium uppercase tracking-widest text-muted/50"
             >
-              En nu...
+              {t("results_splash_and_now")}
             </motion.p>
             <motion.p
               initial={{ opacity: 0, y: 15 }}
@@ -396,7 +398,7 @@ export default function ResultsClient({
               transition={{ duration: 1.2, delay: 1.0 }}
               className="mt-6 font-heading text-2xl font-bold text-heading sm:text-3xl"
             >
-              {firstName}, jouw gecombineerde score
+              {firstName}, {t("results_splash_combined")}
             </motion.p>
             {/* Pulsing dots for suspense */}
             <motion.div
@@ -426,7 +428,7 @@ export default function ResultsClient({
               transition={{ duration: 0.8 }}
               className="text-sm font-semibold uppercase tracking-[0.2em] text-smaragd"
             >
-              Gecombineerde APAC-score
+              {t("results_splash_combined_title")}
             </motion.p>
             <motion.div
               className="mt-8"
@@ -443,12 +445,12 @@ export default function ResultsClient({
               className="mt-6 text-muted max-w-sm"
             >
               {pct >= 80
-                ? "Uitzonderlijk. Je behoort tot de top van AI-professionals."
+                ? t("results_score_exceptional")
                 : pct >= 65
-                ? "Sterk profiel. Je menselijke kwaliteiten onderscheiden je."
+                ? t("results_score_strong")
                 : pct >= 50
-                ? "Veelbelovend. Er zit veel potentie in jouw profiel."
-                : "Een startpunt. Dit is het begin van je groei."}
+                ? t("results_score_promising")
+                : t("results_score_starting")}
             </motion.p>
           </motion.div>
         )}
@@ -457,7 +459,7 @@ export default function ResultsClient({
         {scene === 6 && (
           <motion.div key="s6" className="relative z-10 flex flex-col items-center gap-3" initial={{ opacity: 0 }} animate={{ opacity: 0.6 }} transition={{ duration: 0.5 }}>
             <div className="h-1.5 w-1.5 rounded-full bg-smaragd animate-pulse" />
-            <p className="text-xs text-muted">Je profiel wordt geladen</p>
+            <p className="text-xs text-muted">{t("results_splash_loading")}</p>
           </motion.div>
         )}
       </motion.div>
@@ -476,7 +478,7 @@ export default function ResultsClient({
           animate="visible"
           className="text-sm font-semibold uppercase tracking-[0.2em] text-smaragd"
         >
-          Jouw APAC Profiel
+          {t("results_your_profile")}
         </motion.p>
         <motion.h1
           custom={0.25}
@@ -485,7 +487,7 @@ export default function ResultsClient({
           animate="visible"
           className="mt-3 font-heading text-4xl font-bold text-heading sm:text-5xl"
         >
-          {firstName}, <span className="gradient-text-warm">dit ben jij</span>
+          {firstName}, <span className="gradient-text-warm">{t("results_this_is_you")}</span>
         </motion.h1>
         <motion.p
           custom={0.4}
@@ -494,7 +496,7 @@ export default function ResultsClient({
           animate="visible"
           className="mx-auto mt-3 max-w-lg text-muted"
         >
-          Je unieke combinatie van menselijke kwaliteiten op basis van de APAC-test.
+          {t("results_subtitle")}
         </motion.p>
       </div>
 
@@ -507,7 +509,7 @@ export default function ResultsClient({
         className="flex justify-center"
       >
         <div className="glass rounded-2xl px-10 py-6 text-center" style={{ boxShadow: "0 0 40px rgba(46,213,115,0.12), 0 0 80px rgba(230,115,79,0.08)" }}>
-          <p className="text-sm font-medium text-muted">Gecombineerde score</p>
+          <p className="text-sm font-medium text-muted">{t("results_combined_score")}</p>
           <div className="mt-1 gradient-text-warm">
             <AnimatedScore value={combined} max={combinedMax} color="inherit" size="text-5xl" />
           </div>
@@ -645,6 +647,7 @@ function DimensionCard({
 }
 
 function ArticlesSection({ articles }: { articles: Article[] }) {
+  const { t } = useLanguage();
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-60px" });
 
@@ -656,9 +659,9 @@ function ArticlesSection({ articles }: { articles: Article[] }) {
       transition={{ duration: 0.6 }}
     >
       <h2 className="font-heading text-2xl font-bold text-heading">
-        Aanbevolen <span className="gradient-text">voor jou</span>
+        {t("results_recommended")} <span className="gradient-text">{t("results_recommended_for_you")}</span>
       </h2>
-      <p className="mt-1 text-muted">Artikelen op basis van je sterkste dimensies.</p>
+      <p className="mt-1 text-muted">{t("results_articles_desc")}</p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {articles.map((article, i) => (

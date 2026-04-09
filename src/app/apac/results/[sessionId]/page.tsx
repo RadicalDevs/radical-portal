@@ -10,7 +10,7 @@ export async function generateMetadata({
 }) {
   const { sessionId } = await params;
   return {
-    title: "Jouw APAC Resultaten — Radical Portal",
+    title: "Jouw APAC Resultaten — Radical Network",
     description: "Bekijk je persoonlijke APAC-scores en ontdek je menselijke kwaliteiten.",
     // Prevent indexing of individual results
     robots: { index: false, follow: false },
@@ -39,7 +39,10 @@ export default async function ApacResultsPage({
       <div className="w-full max-w-3xl">
         <ResultsClient
           scores={results.scores}
-          gecombineerd={results.gecombineerd}
+          maxScores={results.maxScores}
+          totaal={results.totaal}
+          totaalMax={results.totaalMax}
+          percentage={results.percentage}
           sessionId={sessionId}
           isLoggedIn={isLoggedIn}
         />

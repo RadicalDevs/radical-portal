@@ -3,12 +3,14 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { forgotPassword } from "../actions";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 export default function ForgotPasswordClient() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const { t } = useLanguage();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,57 +46,67 @@ export default function ForgotPasswordClient() {
           </svg>
         </div>
         <p className="mt-4 text-label">
-          Als er een account met dit e-mailadres bestaat, ontvang je een
-          reset-link.
+          {t("auth_reset_link_sent")}
         </p>
         <Link
           href="/auth/login"
           className="mt-4 inline-block text-sm text-smaragd hover:underline"
         >
-          Terug naar inloggen
+          {t("auth_back_to_login")}
         </Link>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-      <div>
-        <label
-          htmlFor="email"
-          className="block text-sm font-medium text-label"
-        >
-          E-mailadres
-        </label>
-        <input
-          id="email"
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="jouw@email.nl"
-          className="mt-1 block w-full rounded-[8px] border border-surface-border bg-surface px-3 py-2.5 text-heading placeholder-muted focus:border-smaragd focus:ring-1 focus:ring-smaragd"
-        />
+    <>
+      <div className="text-center">
+        <h1 className="font-heading text-2xl font-bold text-heading">
+          {t("auth_forgot_password_title")}
+        </h1>
+        <p className="mt-2 text-sm text-muted">
+          {t("auth_forgot_password_desc")}
+        </p>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-400">{error}</p>
-      )}
+      <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+        <div>
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-label"
+          >
+            {t("auth_email_label")}
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t("auth_email_placeholder")}
+            className="mt-1 block w-full rounded-[8px] border border-surface-border bg-surface px-3 py-2.5 text-heading placeholder-muted focus:border-smaragd focus:ring-1 focus:ring-smaragd"
+          />
+        </div>
 
-      <button
-        type="submit"
-        disabled={isPending || !email}
-        className="flex w-full items-center justify-center rounded-[8px] bg-smaragd py-3 text-base font-semibold text-white transition-colors hover:bg-smaragd-dark disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isPending ? "Versturen…" : "Verstuur reset-link"}
-      </button>
+        {error && (
+          <p className="text-sm text-red-400">{error}</p>
+        )}
 
-      <p className="text-center text-sm text-muted">
-        <Link href="/auth/login" className="text-smaragd hover:underline">
-          Terug naar inloggen
-        </Link>
-      </p>
-    </form>
+        <button
+          type="submit"
+          disabled={isPending || !email}
+          className="flex w-full items-center justify-center rounded-[8px] bg-smaragd py-3 text-base font-semibold text-white transition-colors hover:bg-smaragd-dark disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isPending ? t("auth_sending") : t("auth_send_reset_link")}
+        </button>
+
+        <p className="text-center text-sm text-muted">
+          <Link href="/auth/login" className="text-smaragd hover:underline">
+            {t("auth_back_to_login")}
+          </Link>
+        </p>
+      </form>
+    </>
   );
 }

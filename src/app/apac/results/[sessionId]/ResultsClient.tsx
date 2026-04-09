@@ -6,17 +6,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import RadarChart from "@/components/apac/RadarChart";
 import ScoreCard from "@/components/apac/ScoreCard";
-import type { ApacScores, ApacDimension } from "@/lib/apac/types";
+import type { ApacScores, ApacMaxScores, ApacDimension } from "@/lib/apac/types";
 import { APAC_DIMENSIONS } from "@/lib/apac/types";
 import {
   DIMENSION_LABELS,
   DIMENSION_COLORS,
-  scoreToPercentage,
 } from "@/lib/apac/scoring";
 
 interface Props {
   scores: ApacScores;
-  gecombineerd: number;
+  maxScores: ApacMaxScores;
+  totaal: number;
+  totaalMax: number;
+  percentage: number;
   sessionId: string;
   isLoggedIn: boolean;
 }
@@ -48,10 +50,12 @@ const DIMENSION_DESCRIPTIONS: Record<
   },
 };
 
-function getDescription(dimension: ApacDimension, score: number): string {
+/** Get description based on percentage (score/maxScore) */
+function getDescription(dimension: ApacDimension, score: number, maxScore: number): string {
   const descs = DIMENSION_DESCRIPTIONS[dimension];
-  if (score >= 7.5) return descs.high;
-  if (score >= 5) return descs.mid;
+  const pct = maxScore > 0 ? (score / maxScore) * 100 : 0;
+  if (pct >= 75) return descs.high;
+  if (pct >= 50) return descs.mid;
   return descs.low;
 }
 
@@ -76,7 +80,8 @@ const ANALYZING_STEPS = [
   "Profiel samenstellen…",
 ];
 
-export default function ResultsClient({ scores, gecombineerd, sessionId, isLoggedIn }: Props) {
+export default function ResultsClient({ scores, maxScores, totaal, totaalMax, percentage, sessionId, isLoggedIn }: Props) {
+  const displayMode = "points" as const;
   const [phase, setPhase] = useState(PHASE_SPLASH);
   const [splashStep, setSplashStep] = useState(0);
   const [showChart, setShowChart] = useState(false);
@@ -178,7 +183,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
       }, 700);
     }
 
-    const target = scoreToPercentage(gecombineerd);
+    const target = totaal;
     const duration = 1500;
     const startTime = Date.now() + 200;
     let raf: number;
@@ -200,7 +205,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
       clearTimeout(showTimer);
       cancelAnimationFrame(raf);
     };
-  }, [phase, gecombineerd]);
+  }, [phase, totaal]);
 
   return (
     <div className="w-full">
@@ -287,20 +292,20 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
               Jouw resultaten
             </p>
             <h1 className="mt-2 font-heading text-3xl font-bold text-heading sm:text-4xl">
-              {gecombineerd >= 8
+              {percentage >= 80
                 ? "Uitzonderlijk profiel"
-                : gecombineerd >= 6.5
+                : percentage >= 65
                 ? "Sterk profiel"
-                : gecombineerd >= 5
+                : percentage >= 50
                 ? "Veelbelovend profiel"
                 : "Jouw startpunt"}
             </h1>
             <p className="mx-auto mt-3 max-w-xl text-lg text-muted">
-              {gecombineerd >= 8
+              {percentage >= 80
                 ? "Je scoort bovengemiddeld op alle menselijke kwaliteiten. Je combineert aanpassingsvermogen, persoonlijkheid, bewustzijn en verbinding op een manier die zeldzaam is in de AI-sector."
-                : gecombineerd >= 6.5
+                : percentage >= 65
                 ? "Je menselijke kwaliteiten vormen een solide basis. Je hebt duidelijke sterke punten en weet deze in te zetten. Ontdek hieronder waar je je nog verder kunt ontwikkelen."
-                : gecombineerd >= 5
+                : percentage >= 50
                 ? "Je hebt een interessante mix van kwaliteiten. Er zit potentie in je profiel — met de juiste begeleiding kun je hier veel meer uit halen."
                 : "Iedereen begint ergens. Je APAC-resultaten laten zien waar je nu staat en waar de meeste groei mogelijk is. Dit is het begin van je ontwikkeltraject."}
             </p>
@@ -325,7 +330,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
                     "radial-gradient(circle, #2ed573 0%, #E6734F 50%, #8B5CF6 100%)",
                 }}
               />
-              <RadarChart scores={scores} maxSize={360} animated />
+              <RadarChart scores={scores} maxScores={maxScores} maxSize={360} animated />
             </div>
           </motion.div>
 
@@ -348,8 +353,10 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
                 <ScoreCard
                   dimension={dim}
                   score={scores[dim]}
-                  description={getDescription(dim, scores[dim])}
+                  maxScore={maxScores[dim]}
+                  description={getDescription(dim, scores[dim], maxScores[dim])}
                   animated={i < visibleDims}
+                  displayMode={displayMode}
                 />
               </motion.div>
             ))}
@@ -365,11 +372,11 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
                 className="mt-12"
               >
                 {isLoggedIn ? (
-                  /* ── Logged in: show real score ── */
+                  /* ── Logged in: show real score with toggle ── */
                   <div className="relative overflow-hidden rounded-2xl border border-smaragd/30 bg-gradient-to-br from-smaragd/10 via-surface to-coral/5 p-8 text-center sm:p-10">
                     <div className="pointer-events-none absolute left-1/2 top-0 h-[200px] w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-smaragd/10 blur-[80px]" />
                     <p className="text-sm font-semibold uppercase tracking-widest text-smaragd">
-                      Gecombineerde score
+                      Totaal score
                     </p>
                     <motion.div
                       className="mt-4 font-heading text-7xl font-bold sm:text-8xl"
@@ -380,14 +387,14 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
                         backgroundClip: "text",
                       }}
                     >
-                      {countedScore}%
+                      {countedScore}<span className="text-4xl sm:text-5xl">/{totaalMax}</span>
                     </motion.div>
                     <p className="mx-auto mt-4 max-w-md text-muted">
-                      {gecombineerd >= 8
+                      {percentage >= 80
                         ? "Uitzonderlijk. Je menselijke kwaliteiten plaatsen je in de top van AI-professionals."
-                        : gecombineerd >= 6.5
+                        : percentage >= 65
                         ? "Sterk. Je hebt een solide basis van menselijke kwaliteiten om op voort te bouwen."
-                        : gecombineerd >= 5
+                        : percentage >= 50
                         ? "Veelbelovend. Met de juiste begeleiding kun je hier veel meer uit halen."
                         : "Een startpunt. Iedereen begint ergens — dit is het begin van je groei."}
                     </p>
@@ -411,7 +418,7 @@ export default function ResultsClient({ scores, gecombineerd, sessionId, isLogge
                         }}
                         aria-hidden="true"
                       >
-                        ??%
+                        ???/{totaalMax}
                       </div>
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="flex items-center gap-2 rounded-full border border-smaragd/40 bg-surface/90 px-4 py-2 backdrop-blur-sm">

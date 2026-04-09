@@ -3,7 +3,7 @@ import ApacFormTabs from "./ApacFormTabs";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "APAC Formulier — Radical Portal" };
+export const metadata = { title: "APAC Formulier — Radical Network" };
 
 export default async function AdminApacFormPage() {
   const [questions, formConfig] = await Promise.all([

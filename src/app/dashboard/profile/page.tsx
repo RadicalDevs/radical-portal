@@ -5,7 +5,7 @@ import ProfilePageClient from "./ProfilePageClient";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Profiel — Radical Portal",
+  title: "Profiel — Radical Network",
 };
 
 export default async function ProfilePage() {

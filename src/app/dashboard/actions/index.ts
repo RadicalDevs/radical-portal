@@ -361,11 +361,9 @@ export async function uploadCv(formData: FormData): Promise<UploadCvResult> {
     return { success: false, error: "Alleen PDF en Word-bestanden zijn toegestaan." };
   }
 
-  // Determine file extension
   const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
   const storagePath = `${portalUser.kandidaat_id}/cv.${ext}`;
 
-  // Upload using service client to avoid RLS complexities
   const { error: uploadError } = await serviceClient.storage
     .from("cv-uploads")
     .upload(storagePath, file, {
@@ -378,7 +376,6 @@ export async function uploadCv(formData: FormData): Promise<UploadCvResult> {
     return { success: false, error: "Upload mislukt. Probeer het opnieuw." };
   }
 
-  // Save path reference in kandidaten table
   const { error: dbError } = await serviceClient
     .from("kandidaten")
     .update({ cv_url: storagePath })

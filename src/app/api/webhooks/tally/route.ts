@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { validateApacScores, computeDePoortDecision } from "@/lib/apac/processApacScores";
-import type { ApacScores } from "@/lib/apac/types";
+import { evaluateVetoTriggers, buildVetoEmailHtml } from "@/lib/apac/scoring";
+import type { ApacScores, VetoDetail } from "@/lib/apac/types";
 import { APAC_DIMENSIONS } from "@/lib/apac/types";
 import { sendEmail } from "@/lib/email";
+import { emailWrap, datumNL, buildApacScoreTable, buildDePoortBadge, buildCtaButton, BADGE, STATUS_KLEUR, ROW } from "@/lib/email/templates";
+import { notifyAdmins } from "@/lib/automation/notifyAdmins";
+import { getNotifiableUsers } from "@/lib/automation/emailVoorkeuren";
 
 // ---------------------------------------------------------------------------
 // Tally webhook payload types
@@ -81,6 +85,8 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
+  try {
+
   const fields = payload.data?.fields ?? [];
   const supabase = createServiceClient();
 
@@ -119,6 +125,19 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
   const educationLevel = extractChoiceText(educationLevelField);
   const educationName = extractChoiceText(educationNameField);
 
+  // --- Extraheer opmerkingen/comments veld ---
+  const commentField = fields.find((f) =>
+    (f.type === "TEXTAREA" || f.type === "INPUT_TEXT") &&
+    (f.label.toLowerCase().includes("comment") ||
+     f.label.toLowerCase().includes("opmerkingen") ||
+     f.label.toLowerCase().includes("opmerking") ||
+     f.label.toLowerCase().includes("remarks") ||
+     f.label.toLowerCase().includes("feedback"))
+  );
+  const respondentOpmerkingen = typeof commentField?.value === "string"
+    ? commentField.value.trim() || null
+    : null;
+
   if (!email) {
     console.warn("[tally-webhook] No email found in submission:", payload.data.responseId);
     return NextResponse.json({ error: "E-mailadres niet gevonden in formulier" }, { status: 422 });
@@ -156,14 +175,64 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
     return NextResponse.json({ error: "Ongeldige scores" }, { status: 422 });
   }
 
+  // --- Veto detectie uit individuele Tally antwoorden ---
+  let vetoDetails: VetoDetail[] = [];
+  let vetoGetriggerd = false;
+
+  const { data: vetoQuestions, error: vetoQErr } = await supabase
+    .from("apac_questions")
+    .select("id, question_text, is_veto, options, tally_field_id")
+    .eq("is_veto", true)
+    .eq("is_active", true);
+  if (vetoQErr) console.error("[tally-webhook] apac_questions fetch error:", vetoQErr.message);
+
+  if (vetoQuestions && vetoQuestions.length > 0) {
+    const vetoChecks = [];
+    for (const vq of vetoQuestions) {
+      if (!vq.tally_field_id) {
+        console.warn(`[tally-webhook] Veto question ${vq.id} has no tally_field_id — skipping`);
+        continue;
+      }
+      // Match Tally field by key (= tally_field_id)
+      const tallyField = fields.find((f) => f.key === vq.tally_field_id);
+      if (!tallyField) continue;
+
+      const options = (vq.options as { label: string; value: number; is_veto_fout?: boolean }[]) ?? [];
+      const answerValue = extractNumericValue(tallyField, options);
+      if (answerValue !== null) {
+        vetoChecks.push({
+          question: { id: vq.id, question_text: vq.question_text ?? "", options },
+          answerValue,
+        });
+      }
+    }
+    vetoDetails = evaluateVetoTriggers(vetoChecks);
+    vetoGetriggerd = vetoDetails.length > 0;
+  }
+
+  // Also check VetoTriggered calculated field as fallback
+  if (!vetoGetriggerd) {
+    const vetoCalcField = fields.find(
+      (f) => f.type === "CALCULATED_FIELDS" && f.label === "VetoTriggered"
+    );
+    if (vetoCalcField && typeof vetoCalcField.value === "number" && vetoCalcField.value > 0) {
+      vetoGetriggerd = true;
+      // We don't have details from the calculated field, just the count
+      console.warn(`[tally-webhook] VetoTriggered=${vetoCalcField.value} but no detail from individual questions`);
+    }
+  }
+
   // --- Kandidaat ophalen of aanmaken ---
   let kandidaatId: string;
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingErr } = await supabase
     .from("kandidaten")
     .select("id")
     .eq("email", email)
     .single();
+  if (existingErr && existingErr.code !== "PGRST116") {
+    console.error("[tally-webhook] kandidaat lookup error:", existingErr.message);
+  }
 
   if (existing) {
     kandidaatId = existing.id;
@@ -188,6 +257,23 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
       return NextResponse.json({ error: "Kon kandidaat niet aanmaken" }, { status: 500 });
     }
     kandidaatId = created.id;
+
+    // Notificatie: nieuwe kandidaat aangemeld
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://radicalnetwork.nl";
+    notifyAdmins({
+      key: "nieuwe_kandidaat",
+      subject: `Nieuwe kandidaat: ${voornaam}`,
+      html: emailWrap("Nieuwe kandidaat aangemeld", datumNL(),
+        `<table style="width:100%;border-collapse:collapse">
+          ${ROW("Naam", voornaam)}
+          ${ROW("E-mail", `<a href="mailto:${email}" style="color:#3498db">${email}</a>`, true)}
+          ${ROW("Status", BADGE("PROSPECT", "#3498db"))}
+          ${ROW("Bron", BADGE("TALLY", "#9b59b6"), true)}
+        </table>
+        ${buildCtaButton(`${siteUrl}/admin/candidates?id=${created.id}`, "Bekijk kandidaat")}`),
+      bericht: `${voornaam} (${email}) aangemeld via Tally APAC-formulier`,
+      link: `/admin/candidates?id=${created.id}`,
+    }).catch(() => {});
   }
 
   // --- De Poort check ---
@@ -203,10 +289,11 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
     .single();
 
   if (poortConfig) {
-    const { count } = await supabase
+    const { count, error: countErr } = await supabase
       .from("apac_resultaten")
       .select("kandidaat_id", { count: "exact", head: true })
       .eq("is_seed", false);
+    if (countErr) console.error("[tally-webhook] apac_resultaten count error:", countErr.message);
 
     poortDecision = computeDePoortDecision({
       totalKandidaten: count ?? 0,
@@ -219,7 +306,7 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
 
   // --- portal_session aanmaken voor traceerbaarheid ---
   const sessionToken = crypto.randomUUID();
-  const { data: sessionData } = await supabase
+  const { data: sessionData, error: sessionErr } = await supabase
     .from("portal_sessions")
     .insert({
       session_token: sessionToken,
@@ -232,6 +319,7 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
     })
     .select("id")
     .single();
+  if (sessionErr) console.error("[tally-webhook] portal_session create error:", sessionErr.message);
 
   const sessionId = sessionData?.id ?? null;
 
@@ -255,6 +343,9 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
       is_seed: false,
       portal_session_id: sessionId,
       created_at: submittedAt,
+      veto_getriggerd: vetoGetriggerd,
+      veto_details: vetoDetails,
+      respondent_opmerkingen: respondentOpmerkingen,
     },
     { onConflict: "kandidaat_id" }
   );
@@ -267,7 +358,7 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
     );
   }
 
-  await supabase
+  const { error: updateErr } = await supabase
     .from("kandidaten")
     .update({
       pool_status: newPoolStatus,
@@ -277,87 +368,92 @@ async function processTallyPayload(payload: TallyWebhookPayload) {
       ...(educationName && { education_name: educationName }),
     })
     .eq("id", kandidaatId);
+  if (updateErr) console.error("[tally-webhook] kandidaat update error:", updateErr.message);
 
   // Individuele antwoorden worden niet opgeslagen voor Tally-inzendingen
   // (Tally stuurt alleen CALCULATED_FIELDS, geen individuele antwoorden)
 
   // --- Activiteit loggen ---
-  await supabase.from("activiteiten").insert({
+  const vetoLogSuffix = vetoGetriggerd ? ` Veto: ${vetoDetails.length} getriggerd.` : "";
+  const { error: actError } = await supabase.from("activiteiten").insert({
     type: "apac",
-    beschrijving: `APAC-test voltooid via Tally. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}.`,
+    beschrijving: `APAC-test voltooid via Tally. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}.${vetoLogSuffix}`,
     kandidaat_id: kandidaatId,
-    metadata: { scores, bron: "tally", poort: poortDecision, tallyResponseId: payload.data.responseId },
+    metadata: { scores, bron: "tally", poort: poortDecision, tallyResponseId: payload.data.responseId, vetoDetails, respondentOpmerkingen },
   });
+  if (actError) console.error("[tally-webhook] activiteiten insert error:", actError.message);
 
   // --- CRM-notificaties naar admins ---
   const { data: admins } = await supabase
-    .from("profiles")
-    .select("id")
-    .in("role", ["superadmin", "admin"]);
+    .from("portal_users")
+    .select("auth_user_id")
+    .eq("role", "admin");
 
   if (admins && admins.length > 0) {
+    const vetoNotifSuffix = vetoGetriggerd ? ` ⚠ Veto: ${vetoDetails.length} getriggerd!` : "";
+    const commentNotifSuffix = respondentOpmerkingen ? ` Opmerking: "${respondentOpmerkingen.slice(0, 100)}${respondentOpmerkingen.length > 100 ? "…" : ""}"` : "";
     const notificaties = admins.map((admin) => ({
-      user_id: admin.id,
-      titel: "Nieuwe APAC-test via Tally",
-      bericht: `${voornaam} (${email}) heeft de APAC-test voltooid via Tally. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}.`,
-      type: "info",
+      user_id: admin.auth_user_id,
+      titel: vetoGetriggerd ? "Nieuwe APAC-test via Tally ⚠ Veto" : "Nieuwe APAC-test via Tally",
+      bericht: `${voornaam} (${email}) heeft de APAC-test voltooid via Tally. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}.${vetoNotifSuffix}${commentNotifSuffix}`,
+      type: vetoGetriggerd ? "warning" : "info",
       link: `/kandidaten/${kandidaatId}`,
     }));
 
-    await supabase.from("notificaties").insert(notificaties);
+    const { error: notifErr } = await supabase.from("notificaties").insert(notificaties);
+    if (notifErr) console.error("[tally-webhook] notificaties insert error:", notifErr.message);
   }
 
-  // --- E-mail notificatie naar geconfigureerde adressen ---
-  const { data: formConfig } = await supabase
-    .from("apac_form_config")
-    .select("notification_emails")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
-
-  const notifEmails: string[] = formConfig?.notification_emails ?? [];
-  if (notifEmails.length > 0) {
+  // --- E-mail notificatie naar admins met apac_voltooid voorkeur aan ---
+  const notifiableUsers = await getNotifiableUsers("apac_voltooid");
+  if (notifiableUsers.length > 0) {
+    const notifEmails = notifiableUsers.map((u) => u.email);
     const gecombineerdScore = Math.round(
       ((scores.adaptability + scores.personality + scores.awareness + scores.connection) / 4) * 10
     ) / 10;
 
-    const profileUrl = `https://crm.radicalai.nl/kandidaten/${kandidaatId}`;
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://radicalnetwork.nl";
+    const profileUrl = `${siteUrl}/admin/candidates?id=${kandidaatId}`;
+
+    const vetoEmailHtml = buildVetoEmailHtml(vetoDetails);
+
+    const poortBadge = buildDePoortBadge(newPoolStatus, poortDecision.leerfase);
+    const statusBadge = BADGE(newPoolStatus.toUpperCase(), STATUS_KLEUR[newPoolStatus] || "#888");
 
     await sendEmail({
       to: notifEmails,
-      subject: `Nieuwe APAC-test voltooid — ${voornaam}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
-          <h2 style="color:#1a2e1a;margin-bottom:8px">Nieuwe APAC-test voltooid (Tally)</h2>
-          <p style="color:#555;margin-bottom:24px">
+      subject: vetoGetriggerd
+        ? `Nieuwe aanmelding — ${voornaam} ⚠ Veto getriggerd`
+        : `Nieuwe aanmelding — ${voornaam}`,
+      html: emailWrap(
+        vetoGetriggerd ? `Nieuwe aanmelding — ${voornaam} ⚠ Veto` : `Nieuwe aanmelding — ${voornaam} (Tally)`,
+        datumNL(),
+        `<p style="color:#555;margin-bottom:16px">
             <strong>${voornaam}</strong> (${email}) heeft de APAC-test voltooid via Tally.
           </p>
-          <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-            <tr style="background:#f4f4f4">
-              <th style="text-align:left;padding:8px 12px;font-size:12px;color:#888;text-transform:uppercase">Dimensie</th>
-              <th style="text-align:right;padding:8px 12px;font-size:12px;color:#888;text-transform:uppercase">Score</th>
-            </tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Adaptability</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.adaptability}</td></tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Personality</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.personality}</td></tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Awareness</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.awareness}</td></tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Connection</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.connection}</td></tr>
-            <tr style="background:#f4f4f4;font-weight:bold">
-              <td style="padding:8px 12px">Gecombineerd</td>
-              <td style="padding:8px 12px;text-align:right">${gecombineerdScore}</td>
-            </tr>
+          ${vetoEmailHtml}
+          <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+            <tr><td style="padding:10px 12px;border-bottom:1px solid #eee"><strong>De Poort</strong></td><td style="padding:10px 12px;border-bottom:1px solid #eee">${poortBadge}</td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:10px 12px;border-bottom:1px solid #eee"><strong>Pool status</strong></td><td style="padding:10px 12px;border-bottom:1px solid #eee">${statusBadge}</td></tr>
           </table>
-          <a href="${profileUrl}" style="display:inline-block;background:#1a2e1a;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;margin-bottom:16px">
-            Bekijk kandidaatprofiel →
-          </a>
-          <p style="color:#999;font-size:12px;margin-top:16px">
-            Of kopieer deze link: <a href="${profileUrl}" style="color:#999">${profileUrl}</a>
-          </p>
-        </div>
-      `,
+          ${buildApacScoreTable(scores)}
+          ${respondentOpmerkingen ? `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin:16px 0">
+            <p style="color:#0369a1;font-weight:bold;margin:0 0 4px 0;font-size:13px">Opmerkingen van kandidaat</p>
+            <p style="color:#0c4a6e;margin:0;font-size:14px;white-space:pre-wrap">${respondentOpmerkingen.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          </div>` : ""}
+          ${buildCtaButton(profileUrl, "Bekijk kandidaat")}`
+      ),
     });
   }
 
   return NextResponse.json({ ok: true, kandidaatId, scores });
+  } catch (error) {
+    console.error("[tally-webhook] Processing error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Tally verwerking mislukt" },
+      { status: 500 }
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

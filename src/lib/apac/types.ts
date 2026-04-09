@@ -3,8 +3,16 @@
  * Source of truth: CRM project (src/lib/apac/processApacScores.ts)
  */
 
-/** De vier APAC-dimensies met scores op schaal 0-10 */
+/** De vier APAC-dimensies met totaal punten per dimensie */
 export interface ApacScores {
+  adaptability: number;
+  personality: number;
+  awareness: number;
+  connection: number;
+}
+
+/** Max punten per dimensie (dynamisch berekend uit apac_questions) */
+export interface ApacMaxScores {
   adaptability: number;
   personality: number;
   awareness: number;
@@ -58,12 +66,21 @@ export interface ApacKandidaatInput {
   notities?: string;
 }
 
+/** Detail van een getriggerde veto vraag */
+export interface VetoDetail {
+  question_id: string;
+  question_text: string;
+  answer_value: number;
+  answer_label: string;
+}
+
 export interface ProcessApacScoresInput {
   kandidaatId: string;
   kandidaat: ApacKandidaatInput;
   scores: ApacScores;
   bron: ApacBron;
   metadata?: Record<string, unknown>;
+  vetoDetails?: VetoDetail[];
 }
 
 export interface ProcessApacScoresResult {
@@ -72,6 +89,8 @@ export interface ProcessApacScoresResult {
   gecombineerd: number;
   leerfase: boolean;
   pool_status: "pool" | "pending_review";
+  veto_getriggerd: boolean;
+  veto_details: VetoDetail[];
 }
 
 export interface ValidateApacScoresResult {
@@ -93,4 +112,6 @@ export interface ApacFormConfig {
   thankyou_body: string;
   require_lastname: boolean;
   notification_emails: string[];
+  show_comments_field: boolean;
+  comments_field_label: string;
 }

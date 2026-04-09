@@ -72,7 +72,7 @@ function SingleImportForm() {
 
       {/* APAC Scores */}
       <div>
-        <p className="mb-3 text-sm font-semibold text-label">APAC Scores (0–10)</p>
+        <p className="mb-3 text-sm font-semibold text-label">APAC Scores (0–50 per dimensie)</p>
         <div className="grid gap-4 sm:grid-cols-4">
           {DIMENSIONS.map((dim) => (
             <div key={dim}>
@@ -82,10 +82,10 @@ function SingleImportForm() {
               <input
                 name={dim}
                 type="number"
-                step="0.1"
+                step="1"
                 min="0"
-                max="10"
-                placeholder="0–10"
+                max="50"
+                placeholder="0–50"
                 required
                 className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-body placeholder:text-muted focus:border-smaragd focus:outline-none"
               />

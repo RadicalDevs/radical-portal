@@ -1,6 +1,6 @@
 import ImportClient from "./ImportClient";
 
-export const metadata = { title: "Tally Import — Radical Portal" };
+export const metadata = { title: "Tally Import — Radical Network" };
 
 export default function AdminImportPage() {
   return (

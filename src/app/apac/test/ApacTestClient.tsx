@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useCallback } from "react";
+import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { ApacQuestion } from "../actions";
 import type { ApacFormConfig } from "@/lib/apac/types";
@@ -28,7 +28,7 @@ function groupByVariable(questions: ApacQuestion[]) {
 }
 
 // Default intro content (used when no DB config available)
-const DEFAULT_CONFIG: Omit<ApacFormConfig, "id" | "require_lastname" | "notification_emails" | "thankyou_title" | "thankyou_body"> = {
+const DEFAULT_CONFIG: Omit<ApacFormConfig, "id" | "require_lastname" | "notification_emails" | "thankyou_title" | "thankyou_body" | "show_comments_field" | "comments_field_label"> = {
   intro_title: "The Radical APAC test",
   intro_subtitle: "Adaptability, Personality, Awareness, Connection",
   intro_tagline: "Code is now a commodity. Your character is becoming the true currency.",
@@ -144,8 +144,13 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(true);
+  const [opmerkingen, setOpmerkingen] = useState("");
+
+  const showCommentsStep = formConfig?.show_comments_field ?? true;
+  const commentsLabel = formConfig?.comments_field_label || "Anything else you want to share?";
 
   const hasQuestions = questions.length > 0;
+  const isAdvancing = useRef(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("apac_session");
@@ -179,21 +184,36 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
   const selectAnswer = useCallback(
     (questionId: string, value: number) => {
       setAnswers((prev) => ({ ...prev, [questionId]: value }));
+      if (isAdvancing.current) return;
+      isAdvancing.current = true;
       setTimeout(() => {
-        if (currentIndex < totalQuestions - 1) {
-          setCurrentIndex((prev) => prev + 1);
-        }
+        setCurrentIndex((prev) => {
+          if (prev < totalQuestions - 1) return prev + 1;
+          if (prev === totalQuestions - 1 && showCommentsStep) return totalQuestions;
+          return prev;
+        });
+        isAdvancing.current = false;
       }, 300);
     },
-    [currentIndex, totalQuestions]
+    [totalQuestions, showCommentsStep]
   );
 
   function goBack() {
+    if (isAdvancing.current) return;
     if (currentIndex > 0) setCurrentIndex((prev) => prev - 1);
   }
 
   function goForward() {
-    if (currentIndex < totalQuestions - 1) setCurrentIndex((prev) => prev + 1);
+    if (isAdvancing.current) return;
+    if (currentIndex < totalQuestions - 1) {
+      setCurrentIndex((prev) => prev + 1);
+    } else if (currentIndex === totalQuestions - 1 && showCommentsStep && allAnswered) {
+      setCurrentIndex(totalQuestions);
+    } else {
+      // Op de laatste vraag: spring naar eerste onbeantwoorde vraag
+      const firstUnanswered = questions.findIndex((q) => answers[q.id] === undefined);
+      if (firstUnanswered !== -1) setCurrentIndex(firstUnanswered);
+    }
   }
 
   const allAnswered =
@@ -207,6 +227,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
       formData.set("sessionId", session.sessionId);
       formData.set("sessionToken", session.sessionToken);
       formData.set("answers", JSON.stringify(answers));
+      if (opmerkingen.trim()) formData.set("opmerkingen", opmerkingen.trim());
       const result = await submitApacTest(formData);
       if (!result.success) {
         setError(result.error);
@@ -263,9 +284,12 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
     return <IntroScreen config={formConfig} onStart={() => setShowIntro(false)} />;
   }
 
-  if (currentIndex >= totalQuestions) {
-    setCurrentIndex(totalQuestions - 1);
+  const maxIndex = showCommentsStep ? totalQuestions : totalQuestions - 1;
+  if (currentIndex > maxIndex) {
+    setCurrentIndex(maxIndex);
   }
+
+  const isOnCommentsStep = currentIndex === totalQuestions && showCommentsStep;
 
   const isLastQuestion = currentIndex === totalQuestions - 1;
   const currentAnswered = currentQuestion
@@ -278,43 +302,50 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
       <div>
         <div className="flex items-center justify-between text-sm text-muted">
           <span>
-            Vraag {currentIndex + 1} van {totalQuestions}
+            {isOnCommentsStep
+              ? "Bijna klaar!"
+              : `Vraag ${currentIndex + 1} van ${totalQuestions}`}
           </span>
-          <span>{progress}%</span>
+          <span>{isOnCommentsStep ? "100" : progress}%</span>
         </div>
         <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface">
           <div
             className="h-full rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${progress}%`, backgroundColor: currentDimColor }}
+            style={{
+              width: isOnCommentsStep ? "100%" : `${progress}%`,
+              backgroundColor: isOnCommentsStep ? "#2ed573" : currentDimColor,
+            }}
           />
         </div>
       </div>
 
       {/* Dimension indicator */}
-      <div className="flex items-center gap-2">
-        <span
-          className="inline-block h-3 w-3 rounded-full"
-          style={{ backgroundColor: currentDimColor }}
-        />
-        <span
-          className="text-sm font-semibold"
-          style={{ color: currentDimColor }}
-        >
-          {currentDimLabel}
-        </span>
-        {currentGroup && (
-          <span className="text-xs text-muted">
-            (
-            {currentGroup.questions.findIndex(
-              (q) => q.id === currentQuestion?.id
-            ) + 1}
-            /{currentGroup.questions.length})
+      {!isOnCommentsStep && (
+        <div className="flex items-center gap-2">
+          <span
+            className="inline-block h-3 w-3 rounded-full"
+            style={{ backgroundColor: currentDimColor }}
+          />
+          <span
+            className="text-sm font-semibold"
+            style={{ color: currentDimColor }}
+          >
+            {currentDimLabel}
           </span>
-        )}
-      </div>
+          {currentGroup && (
+            <span className="text-xs text-muted">
+              (
+              {currentGroup.questions.findIndex(
+                (q) => q.id === currentQuestion?.id
+              ) + 1}
+              /{currentGroup.questions.length})
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Question card */}
-      {currentQuestion && (
+      {currentQuestion && !isOnCommentsStep && (
         <div className="rounded-[12px] border border-surface-border bg-surface p-6 shadow-sm sm:p-8">
           <h2 className="text-lg font-medium leading-relaxed text-heading sm:text-xl">
             {currentQuestion.question_text}
@@ -376,6 +407,24 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
         </div>
       )}
 
+      {/* Comments step card */}
+      {isOnCommentsStep && (
+        <div className="rounded-[12px] border border-surface-border bg-surface p-6 shadow-sm sm:p-8">
+          <h2 className="text-lg font-medium leading-relaxed text-heading sm:text-xl">
+            {commentsLabel} <span className="font-normal text-muted">(optional)</span>
+          </h2>
+          <textarea
+            id="opmerkingen"
+            value={opmerkingen}
+            onChange={(e) => setOpmerkingen(e.target.value)}
+            maxLength={2000}
+            rows={4}
+            placeholder="Comments, feedback, or anything else on your mind..."
+            className="mt-6 block w-full rounded-[8px] border border-surface-border bg-surface-light/60 px-4 py-3 text-heading placeholder:text-muted focus:border-smaragd focus:outline-none focus:ring-1 focus:ring-smaragd/50 transition-colors resize-none"
+          />
+        </div>
+      )}
+
       {/* Navigation */}
       <div className="flex items-center justify-between">
         <button
@@ -399,7 +448,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
           Vorige
         </button>
 
-        {isLastQuestion && allAnswered ? (
+        {(isOnCommentsStep || (allAnswered && !showCommentsStep)) ? (
           <button
             onClick={handleSubmit}
             disabled={isPending}
@@ -438,7 +487,7 @@ export default function ApacTestClient({ questions, formConfig }: Props) {
             disabled={!currentAnswered}
             className="flex min-h-[44px] items-center gap-1 rounded-[8px] px-4 py-3 text-sm font-medium text-muted transition-colors hover:bg-surface hover:text-label disabled:cursor-not-allowed disabled:opacity-30"
           >
-            Volgende
+            {isLastQuestion ? "Ga naar onbeantwoorde vraag" : "Volgende"}
             <svg
               className="h-4 w-4"
               fill="none"

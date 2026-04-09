@@ -1,12 +1,15 @@
-import { getAdminKandidaten } from "../actions";
+import { getAdminKandidaten, getApacMaxScores } from "../actions";
 import CandidatesClient from "./CandidatesClient";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Kandidaten — Radical Portal" };
+export const metadata = { title: "Kandidaten — Radical Network" };
 
 export default async function AdminCandidatesPage() {
-  const kandidaten = await getAdminKandidaten();
+  const [kandidaten, maxScores] = await Promise.all([
+    getAdminKandidaten(),
+    getApacMaxScores(),
+  ]);
 
   return (
     <main className="flex flex-1 flex-col px-4 py-6">
@@ -20,7 +23,7 @@ export default async function AdminCandidatesPage() {
           </p>
         </div>
 
-        <CandidatesClient kandidaten={kandidaten} />
+        <CandidatesClient kandidaten={kandidaten} maxScores={maxScores} />
       </div>
     </main>
   );

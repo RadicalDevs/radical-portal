@@ -128,6 +128,9 @@ export default function FormConfigClient({
   const [requireLastname, setRequireLastname] = useState(
     config?.require_lastname ?? false
   );
+  const [showComments, setShowComments] = useState(
+    config?.show_comments_field ?? true
+  );
   const [rulesRaw, setRulesRaw] = useState(
     config?.rules_items
       ? JSON.stringify(config.rules_items, null, 2)
@@ -183,6 +186,7 @@ export default function FormConfigClient({
     const fd = new FormData(e.currentTarget);
     fd.set("rules_items", rulesRaw);
     fd.set("require_lastname", String(requireLastname));
+    fd.set("show_comments_field", String(showComments));
 
     startTransition(async () => {
       const res = await updateFormConfig(fd);
@@ -336,6 +340,33 @@ export default function FormConfigClient({
               Achternaam verplicht maken
             </span>
           </label>
+        </Section>
+
+        {/* ── Opmerkingenveld ── */}
+        <Section
+          title="Opmerkingenveld"
+          subtitle="Optioneel tekstveld aan het einde van de test waar respondenten feedback kunnen achterlaten"
+        >
+          <label className="flex cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={showComments}
+              onChange={(e) => setShowComments(e.target.checked)}
+              className="h-4 w-4 rounded"
+            />
+            <span className="text-sm text-label">
+              Opmerkingenveld tonen aan het einde van de test
+            </span>
+          </label>
+          {showComments && (
+            <Field label="Label tekst" hint="De tekst die boven het tekstveld wordt getoond">
+              <input
+                name="comments_field_label"
+                defaultValue={config?.comments_field_label ?? "Anything else you want to share?"}
+                className={inputCls}
+              />
+            </Field>
+          )}
         </Section>
 
         {/* ── E-mail notificaties ── */}

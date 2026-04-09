@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import ThemeProvider from "@/components/providers/ThemeProvider";
+import { LanguageProvider } from "@/lib/i18n/LanguageContext";
 import Navigation from "@/components/layout/Navigation";
 import Footer from "@/components/layout/Footer";
 import "./globals.css";
@@ -11,9 +12,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Radical Portal — AI Professionals",
+  title: "Radical Network — AI Professionals",
   description:
-    "Ontdek je menselijke kwaliteiten met het APAC-framework. Verbind, groei en vind je plek in de AI-sector.",
+    "Discover your human qualities with the APAC framework. Connect, grow and find your place in the AI sector.",
 };
 
 // Inline script: set .dark before first paint to prevent FOUC
@@ -34,12 +35,12 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="nl"
+      lang="en"
       className={`${inter.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: themeScript }} />
         <link
           href="https://fonts.googleapis.com/css2?family=Afacad+Flux:wght@400;700&display=swap"
           rel="stylesheet"
@@ -47,9 +48,11 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col font-body overflow-x-hidden">
         <ThemeProvider>
-          <Navigation />
-          {children}
-          <Footer />
+          <LanguageProvider>
+            <Navigation />
+            {children}
+            <Footer />
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

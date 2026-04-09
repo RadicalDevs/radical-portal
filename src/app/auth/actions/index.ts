@@ -4,6 +4,12 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import {
+  generateVerificationToken,
+  getVerificationTokenExpiry,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+} from "@/lib/email";
 
 // ---------------------------------------------------------------------------
 // Validation schemas
@@ -57,7 +63,7 @@ export async function register(formData: FormData): Promise<AuthResult> {
 
   const { firstName, lastName, email, password, sessionId } = parsed.data;
 
-  // 1. Create Supabase Auth user
+  // 1. Create Supabase Auth user (geen emailRedirectTo — wij sturen zelf verificatie)
   const supabase = await createClient();
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
@@ -67,7 +73,6 @@ export async function register(formData: FormData): Promise<AuthResult> {
         first_name: firstName,
         last_name: lastName,
       },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/callback`,
     },
   });
 
@@ -131,7 +136,10 @@ export async function register(formData: FormData): Promise<AuthResult> {
     }
   }
 
-  // 4. Create portal_users record
+  // 4. Create portal_users record with verification token
+  const verificationToken = generateVerificationToken();
+  const tokenExpiry = getVerificationTokenExpiry();
+
   const { error: portalError } = await service.from("portal_users").insert({
     auth_user_id: authUserId,
     kandidaat_id: kandidaatId || null,
@@ -139,10 +147,23 @@ export async function register(formData: FormData): Promise<AuthResult> {
     first_name: firstName,
     last_name: lastName,
     email,
+    email_verified: false,
+    verification_token: verificationToken,
+    verification_token_expires_at: tokenExpiry.toISOString(),
   });
 
   if (portalError) {
     console.error("[register] portal_users insert error:", portalError);
+  }
+
+  // 4b. Stuur verificatie-email via eigen SMTP
+  const emailSent = await sendVerificationEmail({
+    to: email,
+    firstName,
+    token: verificationToken,
+  });
+  if (!emailSent) {
+    console.error("[register] Verificatie-email kon niet worden verstuurd naar:", email);
   }
 
   // 5. If there's an APAC session, link it to the kandidaat
@@ -253,16 +274,114 @@ export async function forgotPassword(formData: FormData): Promise<AuthResult> {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/callback?type=recovery`,
-  });
+  const service = createServiceClient();
 
-  if (error) {
-    console.error("[forgotPassword] error:", error);
+  // Zoek portal_user
+  const { data: portalUser } = await service
+    .from("portal_users")
+    .select("id, first_name")
+    .eq("email", parsed.data.email)
+    .single();
+
+  if (!portalUser) {
+    // Geen info weggeven — altijd success retourneren
+    return { success: true };
   }
 
-  // Always return success to prevent email enumeration
+  // Genereer reset token (1 uur geldig)
+  const token = generateVerificationToken();
+  const expiry = new Date();
+  expiry.setHours(expiry.getHours() + 1);
+
+  await service
+    .from("portal_users")
+    .update({
+      reset_token: token,
+      reset_token_expires_at: expiry.toISOString(),
+    })
+    .eq("id", portalUser.id);
+
+  // Stuur email via eigen SMTP
+  await sendPasswordResetEmail({
+    to: parsed.data.email,
+    firstName: portalUser.first_name || "daar",
+    token,
+  });
+
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Reset password (met token)
+// ---------------------------------------------------------------------------
+
+const ResetPasswordSchema = z.object({
+  token: z.string().min(1, "Token is verplicht"),
+  password: z
+    .string()
+    .min(8, "Wachtwoord moet minimaal 8 tekens zijn")
+    .regex(/[A-Z]/, "Wachtwoord moet een hoofdletter bevatten")
+    .regex(/[0-9]/, "Wachtwoord moet een cijfer bevatten"),
+});
+
+export async function resetPassword(formData: FormData): Promise<AuthResult> {
+  const parsed = ResetPasswordSchema.safeParse({
+    token: formData.get("token"),
+    password: formData.get("password"),
+  });
+
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const { token, password } = parsed.data;
+  const service = createServiceClient();
+
+  // Zoek user via token
+  const { data: portalUser } = await service
+    .from("portal_users")
+    .select("id, auth_user_id, reset_token_expires_at")
+    .eq("reset_token", token)
+    .single();
+
+  if (!portalUser) {
+    return { success: false, error: "Ongeldige of verlopen reset-link. Vraag een nieuwe aan." };
+  }
+
+  // Check expiry
+  if (
+    portalUser.reset_token_expires_at &&
+    new Date(portalUser.reset_token_expires_at) < new Date()
+  ) {
+    return { success: false, error: "Deze reset-link is verlopen. Vraag een nieuwe aan." };
+  }
+
+  // Update wachtwoord via Supabase Admin API
+  // Use @supabase/supabase-js directly — @supabase/ssr doesn't reliably handle auth.admin
+  const { createClient: createAdminClient } = await import("@supabase/supabase-js");
+  const adminClient = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  const { error: updateError } = await adminClient.auth.admin.updateUserById(
+    portalUser.auth_user_id,
+    { password }
+  );
+
+  if (updateError) {
+    console.error("[resetPassword] error:", updateError);
+    return { success: false, error: "Kon wachtwoord niet bijwerken. Probeer het later opnieuw." };
+  }
+
+  // Clear token
+  await service
+    .from("portal_users")
+    .update({
+      reset_token: null,
+      reset_token_expires_at: null,
+    })
+    .eq("id", portalUser.id);
+
   return { success: true };
 }
 
@@ -276,17 +395,45 @@ export async function resendVerification(formData: FormData): Promise<AuthResult
     return { success: false, error: "E-mailadres is verplicht." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.resend({
-    type: "signup",
-    email,
-    options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/callback`,
-    },
+  const service = createServiceClient();
+
+  // Zoek portal_user en check of al geverifieerd
+  const { data: portalUser } = await service
+    .from("portal_users")
+    .select("id, first_name, email_verified")
+    .eq("email", email)
+    .single();
+
+  if (!portalUser) {
+    // Geen user gevonden — geef geen info weg (prevent enumeration)
+    return { success: true };
+  }
+
+  if (portalUser.email_verified) {
+    return { success: false, error: "Je e-mailadres is al geverifieerd. Je kunt inloggen." };
+  }
+
+  // Genereer nieuw token
+  const newToken = generateVerificationToken();
+  const newExpiry = getVerificationTokenExpiry();
+
+  await service
+    .from("portal_users")
+    .update({
+      verification_token: newToken,
+      verification_token_expires_at: newExpiry.toISOString(),
+    })
+    .eq("id", portalUser.id);
+
+  // Stuur email via eigen SMTP
+  const sent = await sendVerificationEmail({
+    to: email,
+    firstName: portalUser.first_name || "daar",
+    token: newToken,
   });
 
-  if (error) {
-    console.error("[resendVerification] error:", error);
+  if (!sent) {
+    console.error("[resendVerification] Email verzenden mislukt naar:", email);
     return { success: false, error: "Kon verificatie-email niet versturen. Probeer het later opnieuw." };
   }
 

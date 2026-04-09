@@ -3,9 +3,12 @@
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/server";
 import { validateApacScores, computeDePoortDecision } from "@/lib/apac/processApacScores";
-import type { ApacScores, ApacDimension, ApacFormConfig } from "@/lib/apac/types";
+import { calculateMaxScores, evaluateVetoTriggers, buildVetoEmailHtml } from "@/lib/apac/scoring";
+import type { ApacScores, ApacMaxScores, ApacDimension, ApacFormConfig, VetoDetail } from "@/lib/apac/types";
 import { APAC_DIMENSIONS } from "@/lib/apac/types";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, sendApacResultsEmail } from "@/lib/email";
+import { emailWrap, datumNL, buildApacScoreTable, buildDePoortBadge, buildCtaButton, BADGE, STATUS_KLEUR } from "@/lib/email/templates";
+import { getNotifiableUsers } from "@/lib/automation/emailVoorkeuren";
 
 // ---------------------------------------------------------------------------
 // Form config (public read)
@@ -35,6 +38,11 @@ async function verifyTurnstile(token: string): Promise<boolean> {
     console.warn("[Turnstile] No secret key configured — skipping verification");
     return true;
   }
+  if (!token) {
+    // Captcha kon niet laden (bijv. ad blocker) — laat door met warning
+    console.warn("[Turnstile] Empty token received — captcha may have failed to load, bypassing");
+    return true;
+  }
 
   const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
     method: "POST",
@@ -51,7 +59,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 const CreateSessionSchema = z.object({
-  turnstileToken: z.string().min(1, "Captcha verificatie is verplicht"),
+  turnstileToken: z.string(),
   source: z.enum(["website", "email", "social_media", "linkedin", "direct"]).default("website"),
   firstName: z.string().min(1, "Voornaam is verplicht").max(100),
   email: z.string().email("Ongeldig e-mailadres"),
@@ -177,6 +185,7 @@ const AnswerSchema = z.record(z.string(), z.number());
 const SubmitSchema = z.object({
   sessionId: z.string().uuid("Ongeldige sessie"),
   sessionToken: z.string().min(1, "Sessie token ontbreekt"),
+  opmerkingen: z.string().max(2000).optional(),
   answers: z.string().transform((val, ctx) => {
     try {
       const parsed = JSON.parse(val);
@@ -202,13 +211,14 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
     sessionId: formData.get("sessionId"),
     sessionToken: formData.get("sessionToken"),
     answers: formData.get("answers"),
+    opmerkingen: formData.get("opmerkingen") || undefined,
   });
 
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const { sessionId, sessionToken, answers } = parsed.data;
+  const { sessionId, sessionToken, answers, opmerkingen } = parsed.data;
   const supabase = createServiceClient();
 
   // Verify session exists and is not yet completed
@@ -227,24 +237,24 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
     return { success: false, error: "Deze test is al ingestuurd." };
   }
 
-  // Fetch questions to calculate weighted scores
+  // Fetch questions to calculate total point scores (+ veto info)
   const { data: questions, error: qError } = await supabase
     .from("apac_questions")
-    .select("id, variable, weight")
+    .select("id, variable, weight, options, question_text, is_veto")
     .eq("is_active", true);
 
   if (qError || !questions || questions.length === 0) {
     return { success: false, error: "Kan vragen niet ophalen." };
   }
 
-  // Calculate weighted average per dimension (APAC + B5)
+  // Calculate TOTAAL PUNTEN per dimension: score = SUM(antwoord × gewicht)
   const allDimensions = [
     ...APAC_DIMENSIONS,
     "b5_openness", "b5_conscientiousness", "b5_extraversion", "b5_agreeableness", "b5_stability",
   ];
-  const dimensionTotals: Record<string, { weightedSum: number; totalWeight: number }> = {};
+  const dimensionTotals: Record<string, { weightedSum: number }> = {};
   for (const dim of allDimensions) {
-    dimensionTotals[dim] = { weightedSum: 0, totalWeight: 0 };
+    dimensionTotals[dim] = { weightedSum: 0 };
   }
 
   for (const q of questions) {
@@ -255,11 +265,10 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
     const dim = q.variable as string;
     if (dimensionTotals[dim]) {
       dimensionTotals[dim].weightedSum += answerValue * (q.weight ?? 1);
-      dimensionTotals[dim].totalWeight += q.weight ?? 1;
     }
   }
 
-  // Compute APAC scores (1–10 scale)
+  // Compute APAC scores as TOTAL POINTS (no normalization)
   const scores: ApacScores = {
     adaptability: 0,
     personality: 0,
@@ -268,30 +277,41 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
   };
 
   for (const dim of APAC_DIMENSIONS) {
-    const t = dimensionTotals[dim];
-    scores[dim] =
-      t.totalWeight > 0
-        ? Math.round((t.weightedSum / t.totalWeight) * 10) / 10
-        : 1;
+    scores[dim] = Math.round(dimensionTotals[dim].weightedSum * 10) / 10;
   }
 
-  // Clamp APAC scores to 1-10 range (DB constraint: >= 1 AND <= 10)
-  for (const dim of APAC_DIMENSIONS) {
-    scores[dim] = Math.max(1, Math.min(10, scores[dim]));
-  }
+  // Calculate max scores per dimension from question options
+  const maxScores: ApacMaxScores = calculateMaxScores(
+    questions.map((q) => ({
+      variable: q.variable,
+      options: (q.options as { value: number }[]) ?? [],
+      weight: q.weight ?? 1,
+    }))
+  );
 
-  // Compute B5 scores (stored in session metadata, not in apac_resultaten)
+  // Compute B5 scores as total points (stored in session metadata)
   const b5Scores: Record<string, number> = {};
   for (const dim of allDimensions.filter((d) => d.startsWith("b5_"))) {
-    const t = dimensionTotals[dim];
-    b5Scores[dim] =
-      t.totalWeight > 0
-        ? Math.round((t.weightedSum / t.totalWeight) * 10) / 10
-        : 0;
+    b5Scores[dim] = Math.round(dimensionTotals[dim].weightedSum * 10) / 10;
   }
 
-  // Validate computed scores
-  const validation = validateApacScores(scores);
+  // ---- Veto evaluatie ----
+  const vetoChecks = questions
+    .filter((q) => q.is_veto === true)
+    .map((q) => ({
+      question: {
+        id: q.id,
+        question_text: q.question_text ?? "",
+        options: (q.options as { label: string; value: number; is_veto_fout?: boolean }[]) ?? [],
+      },
+      answerValue: answers[q.id],
+    }));
+
+  const vetoDetails: VetoDetail[] = evaluateVetoTriggers(vetoChecks);
+  const vetoGetriggerd = vetoDetails.length > 0;
+
+  // Validate computed scores against max
+  const validation = validateApacScores(scores, maxScores);
   if (!validation.valid) {
     return { success: false, error: `Score validatie mislukt: ${validation.errors.join(", ")}` };
   }
@@ -335,6 +355,9 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
       bron: "portal",
       is_seed: false,
       portal_session_id: sessionId,
+      veto_getriggerd: vetoGetriggerd,
+      veto_details: vetoDetails,
+      respondent_opmerkingen: opmerkingen || null,
     },
     { onConflict: "kandidaat_id" }
   );
@@ -381,8 +404,8 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
     })
     .eq("id", kandidaatId);
 
-  // 3. UPDATE portal_sessions — store all scores (APAC + B5) as JSONB
-  const allScores = { ...scores, ...b5Scores };
+  // 3. UPDATE portal_sessions — store all scores + maxScores as JSONB
+  const allScores = { ...scores, ...b5Scores, maxScores };
   const { error: updateError } = await supabase
     .from("portal_sessions")
     .update({
@@ -396,12 +419,18 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
     return { success: false, error: "Kon resultaten niet opslaan." };
   }
 
+  // Pre-compute totals for logging and notifications
+  const totaalScore = scores.adaptability + scores.personality + scores.awareness + scores.connection;
+  const totaalMax = maxScores.adaptability + maxScores.personality + maxScores.awareness + maxScores.connection;
+  const percentage = totaalMax > 0 ? Math.round((totaalScore / totaalMax) * 100) : 0;
+
   // 4. Log in activiteiten (CRM ziet dit in kandidaat-detail)
+  const vetoLogSuffix = vetoGetriggerd ? ` Veto: ${vetoDetails.length} getriggerd.` : "";
   await supabase.from("activiteiten").insert({
     type: "apac",
-    beschrijving: `APAC-test voltooid via portal. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}. De Poort: ${poortDecision.leerfase ? "leerfase" : "actieve fase"}.`,
+    beschrijving: `APAC-test voltooid via portal. Scores: A=${scores.adaptability}/${maxScores.adaptability} P=${scores.personality}/${maxScores.personality} Aw=${scores.awareness}/${maxScores.awareness} C=${scores.connection}/${maxScores.connection}. De Poort: ${poortDecision.leerfase ? "leerfase" : "actieve fase"}.${vetoLogSuffix}`,
     kandidaat_id: kandidaatId,
-    metadata: { scores, b5Scores, bron: "portal", poort: poortDecision },
+    metadata: { scores, maxScores, b5Scores, bron: "portal", poort: poortDecision, vetoDetails, respondentOpmerkingen: opmerkingen || null },
   });
 
   // 5. Log user event (portal tracking)
@@ -414,32 +443,28 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
 
   // 6. Notificatie naar alle admins (CRM notificatiebel)
   const { data: admins } = await supabase
-    .from("profiles")
-    .select("id")
-    .in("role", ["superadmin", "admin"]);
+    .from("portal_users")
+    .select("auth_user_id")
+    .eq("role", "admin");
 
   if (admins && admins.length > 0) {
+    const vetoNotifSuffix = vetoGetriggerd ? ` ⚠ Veto: ${vetoDetails.length} getriggerd!` : "";
+    const commentNotifSuffix = opmerkingen ? ` Opmerking: "${opmerkingen.slice(0, 100)}${opmerkingen.length > 100 ? "…" : ""}"` : "";
     const notificaties = admins.map((admin) => ({
-      user_id: admin.id,
-      titel: "Nieuwe APAC-test via portal",
-      bericht: `Een kandidaat heeft de APAC-test voltooid via het portal. Scores: A=${scores.adaptability} P=${scores.personality} A=${scores.awareness} C=${scores.connection}.`,
-      type: "info",
+      user_id: admin.auth_user_id,
+      titel: vetoGetriggerd ? "Nieuwe APAC-test via portal ⚠ Veto" : "Nieuwe APAC-test via portal",
+      bericht: `Een kandidaat heeft de APAC-test voltooid via het portal. Scores: A=${scores.adaptability}/${maxScores.adaptability} P=${scores.personality}/${maxScores.personality} Aw=${scores.awareness}/${maxScores.awareness} C=${scores.connection}/${maxScores.connection} (${percentage}%).${vetoNotifSuffix}${commentNotifSuffix}`,
+      type: vetoGetriggerd ? "warning" : "info",
       link: `/kandidaten/${kandidaatId}`,
     }));
 
     await supabase.from("notificaties").insert(notificaties);
   }
 
-  // 7. E-mail notificaties naar geconfigureerde adressen
-  const { data: formConfig } = await supabase
-    .from("apac_form_config")
-    .select("notification_emails")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
-
-  const notifEmails: string[] = formConfig?.notification_emails ?? [];
-  if (notifEmails.length > 0) {
+  // 7. E-mail notificaties naar admins met apac_voltooid voorkeur aan
+  const notifiableUsers = await getNotifiableUsers("apac_voltooid");
+  if (notifiableUsers.length > 0) {
+    const notifEmails = notifiableUsers.map((u) => u.email);
     const { data: kandidaat } = await supabase
       .from("kandidaten")
       .select("voornaam, email")
@@ -448,42 +473,60 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
 
     const naam = kandidaat?.voornaam ?? "Kandidaat";
     const email = kandidaat?.email ?? "";
-    const gecombineerdScore = Math.round(
-      ((scores.adaptability + scores.personality + scores.awareness + scores.connection) / 4) * 10
-    ) / 10;
+
+    const vetoEmailHtml = buildVetoEmailHtml(vetoDetails);
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://radicalnetwork.nl";
+    const poortBadge = buildDePoortBadge(newPoolStatus, poortDecision.leerfase);
+    const statusBadge = BADGE(newPoolStatus.toUpperCase(), STATUS_KLEUR[newPoolStatus] || "#888");
 
     await sendEmail({
       to: notifEmails,
-      subject: `Nieuwe APAC-test voltooid — ${naam}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
-          <h2 style="color:#1a2e1a;margin-bottom:8px">Nieuwe APAC-test voltooid</h2>
-          <p style="color:#555;margin-bottom:24px">
-            <strong>${naam}</strong> (${email}) heeft de APAC-test voltooid via het Radical Portal.
+      subject: vetoGetriggerd
+        ? `Nieuwe aanmelding — ${naam} ⚠ Veto getriggerd`
+        : `Nieuwe aanmelding — ${naam}`,
+      html: emailWrap(
+        vetoGetriggerd ? `Nieuwe aanmelding — ${naam} ⚠ Veto` : `Nieuwe aanmelding — ${naam}`,
+        datumNL(),
+        `<p style="color:#555;margin-bottom:16px">
+            <strong>${naam}</strong> (${email}) heeft de APAC-test voltooid via Radical Network.
           </p>
-          <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-            <tr style="background:#f4f4f4">
-              <th style="text-align:left;padding:8px 12px;font-size:12px;color:#888;text-transform:uppercase">Dimensie</th>
-              <th style="text-align:right;padding:8px 12px;font-size:12px;color:#888;text-transform:uppercase">Score</th>
-            </tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Adaptability</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.adaptability}</td></tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Personality</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.personality}</td></tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Awareness</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.awareness}</td></tr>
-            <tr><td style="padding:8px 12px;border-bottom:1px solid #eee">Connection</td><td style="padding:8px 12px;text-align:right;border-bottom:1px solid #eee">${scores.connection}</td></tr>
-            <tr style="background:#f4f4f4;font-weight:bold">
-              <td style="padding:8px 12px">Gecombineerd</td>
-              <td style="padding:8px 12px;text-align:right">${gecombineerdScore}</td>
-            </tr>
+          ${vetoEmailHtml}
+          <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+            <tr><td style="padding:10px 12px;border-bottom:1px solid #eee"><strong>De Poort</strong></td><td style="padding:10px 12px;border-bottom:1px solid #eee">${poortBadge}</td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:10px 12px;border-bottom:1px solid #eee"><strong>Pool status</strong></td><td style="padding:10px 12px;border-bottom:1px solid #eee">${statusBadge}</td></tr>
           </table>
-          <p style="color:#999;font-size:12px">
-            Bekijk het kandidaatprofiel in het Radical Portal admin dashboard.
-          </p>
-        </div>
-      `,
+          ${buildApacScoreTable(scores, maxScores)}
+          ${opmerkingen ? `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px;margin:16px 0">
+            <p style="color:#0369a1;font-weight:bold;margin:0 0 4px 0;font-size:13px">Opmerkingen van kandidaat</p>
+            <p style="color:#0c4a6e;margin:0;font-size:14px;white-space:pre-wrap">${opmerkingen.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          </div>` : ""}
+          ${buildCtaButton(`${siteUrl}/kandidaten/${kandidaatId}`, "Bekijk kandidaat")}`
+      ),
     });
   }
 
-  // 8. Embedding wordt getriggerd via de CRM's bestaande embed pipeline.
+  // 8. E-mail met resultaten-preview naar de kandidaat
+  {
+    const { data: kand } = await supabase
+      .from("kandidaten")
+      .select("voornaam, email")
+      .eq("id", kandidaatId)
+      .single();
+
+    if (kand?.email) {
+      const sent = await sendApacResultsEmail({
+        to: kand.email,
+        firstName: kand.voornaam || "daar",
+        scores: { adaptability: scores.adaptability, personality: scores.personality, awareness: scores.awareness, connection: scores.connection },
+        maxScores: { adaptability: maxScores.adaptability, personality: maxScores.personality, awareness: maxScores.awareness, connection: maxScores.connection },
+        sessionId,
+      });
+      if (!sent) console.error("[submitApacTest] Resultaten-email mislukt naar:", kand.email);
+    }
+  }
+
+  // 9. Embedding wordt getriggerd via de CRM's bestaande embed pipeline.
   //    De CRM luistert op Supabase Realtime voor INSERT op apac_resultaten
   //    en UPDATE op kandidaten. Als dat niet automatisch gebeurt, moet
   //    embed_kandidaat() handmatig worden aangeroepen vanuit het CRM.
@@ -497,7 +540,10 @@ export async function submitApacTest(formData: FormData): Promise<SubmitApacResu
 
 export interface SessionResults {
   scores: ApacScores;
-  gecombineerd: number;
+  maxScores: ApacMaxScores;
+  totaal: number;
+  totaalMax: number;
+  percentage: number;
   completedAt: string;
 }
 
@@ -517,15 +563,45 @@ export async function getSessionResults(
     return null;
   }
 
-  const scores = data.scores as ApacScores;
-  const gecombineerd =
-    Math.round(
-      ((scores.adaptability + scores.personality + scores.awareness + scores.connection) / 4) * 10
-    ) / 10;
+  const rawScores = data.scores as Record<string, unknown>;
+  const scores: ApacScores = {
+    adaptability: (rawScores.adaptability as number) ?? 0,
+    personality: (rawScores.personality as number) ?? 0,
+    awareness: (rawScores.awareness as number) ?? 0,
+    connection: (rawScores.connection as number) ?? 0,
+  };
+
+  // maxScores kan in de session JSONB zitten (nieuw) of moet uit apac_questions berekend worden
+  let resolvedMaxScores: ApacMaxScores;
+  const storedMax = rawScores.maxScores as ApacMaxScores | undefined;
+
+  if (storedMax?.adaptability) {
+    resolvedMaxScores = storedMax;
+  } else {
+    // Fallback: bereken uit actieve vragen
+    const { data: questions } = await supabase
+      .from("apac_questions")
+      .select("variable, options, weight")
+      .eq("is_active", true);
+
+    resolvedMaxScores = calculateMaxScores(
+      (questions ?? []).map((q) => ({
+        variable: q.variable,
+        options: (q.options as { value: number }[]) ?? [],
+        weight: q.weight ?? 1,
+      }))
+    );
+  }
+
+  const totaal = scores.adaptability + scores.personality + scores.awareness + scores.connection;
+  const totaalMax = resolvedMaxScores.adaptability + resolvedMaxScores.personality + resolvedMaxScores.awareness + resolvedMaxScores.connection;
 
   return {
     scores,
-    gecombineerd,
+    maxScores: resolvedMaxScores,
+    totaal,
+    totaalMax,
+    percentage: totaalMax > 0 ? Math.round((totaal / totaalMax) * 100) : 0,
     completedAt: data.created_at,
   };
 }

@@ -5,14 +5,14 @@ import ResultsClient from "./ResultsClient";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Jouw Resultaten — Radical Portal",
+  title: "Jouw Resultaten — Radical Network",
 };
 
 export default async function DashboardResultsPage() {
   const data = await getDashboardData();
 
   if (!data) redirect("/auth/login");
-  if (!data.scores) redirect("/apac");
+  if (!data.scores || !data.maxScores) redirect("/apac");
 
   const articles = await getRelatedArticles(data.scores);
 
@@ -30,6 +30,7 @@ export default async function DashboardResultsPage() {
             kandidaatId={data.user.kandidaatId}
             firstName={data.user.firstName}
             initialScores={data.scores}
+            maxScores={data.maxScores}
             articles={articles}
           />
         </div>

@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import type { ApacDimension } from "@/lib/apac/types";
 import { DIMENSION_LABELS, DIMENSION_COLORS, scoreToPercentage } from "@/lib/apac/scoring";
@@ -5,26 +7,37 @@ import { DIMENSION_LABELS, DIMENSION_COLORS, scoreToPercentage } from "@/lib/apa
 interface ScoreCardProps {
   dimension: ApacDimension;
   score: number;
+  maxScore: number;
   description?: string;
   animated?: boolean;
+  /** Display mode: "points" shows 22/30, "percentage" shows 73% */
+  displayMode?: "points" | "percentage";
 }
 
-export default function ScoreCard({ dimension, score, description, animated = false }: ScoreCardProps) {
+export default function ScoreCard({
+  dimension,
+  score,
+  maxScore,
+  description,
+  animated = false,
+  displayMode = "points",
+}: ScoreCardProps) {
   const label = DIMENSION_LABELS[dimension];
   const color = DIMENSION_COLORS[dimension];
-  const percentage = scoreToPercentage(score);
-  const [displayPercentage, setDisplayPercentage] = useState(0);
+  const percentage = scoreToPercentage(score, maxScore);
+  const [displayValue, setDisplayValue] = useState(0);
   const [barWidth, setBarWidth] = useState(0);
+
+  const targetValue = displayMode === "points" ? score : percentage;
 
   useEffect(() => {
     if (!animated) {
-      setDisplayPercentage(percentage);
+      setDisplayValue(targetValue);
       setBarWidth(percentage);
       return;
     }
 
-    // Reset to 0 immediately to prevent flicker
-    setDisplayPercentage(0);
+    setDisplayValue(0);
     setBarWidth(0);
 
     const barTimer = setTimeout(() => setBarWidth(percentage), 100);
@@ -37,7 +50,7 @@ export default function ScoreCard({ dimension, score, description, animated = fa
       const elapsed = Date.now() - start;
       const progress = Math.min(elapsed / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayPercentage(Math.round(eased * percentage));
+      setDisplayValue(Math.round(eased * targetValue));
       if (progress < 1) raf = requestAnimationFrame(tick);
     }
 
@@ -50,7 +63,7 @@ export default function ScoreCard({ dimension, score, description, animated = fa
       clearTimeout(startTimer);
       cancelAnimationFrame(raf);
     };
-  }, [animated, percentage]);
+  }, [animated, percentage, targetValue]);
 
   return (
     <div className="rounded-[8px] border border-surface-border bg-surface p-4 shadow-sm sm:p-6">
@@ -59,7 +72,11 @@ export default function ScoreCard({ dimension, score, description, animated = fa
           {label}
         </h3>
         <span className="text-2xl font-bold text-heading tabular-nums">
-          {displayPercentage}%
+          {displayMode === "points" ? (
+            <>{displayValue}<span className="text-base font-normal text-muted">/{maxScore}</span></>
+          ) : (
+            <>{displayValue}%</>
+          )}
         </span>
       </div>
       {/* Score bar */}

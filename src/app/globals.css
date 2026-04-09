@@ -130,6 +130,14 @@ input, textarea, select {
   background-clip: text;
 }
 
+/* Shadow utilities (used by CRM components) */
+.shadow-card {
+  box-shadow: 0 0 0 1px #27272A, 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.shadow-card-hover {
+  box-shadow: 0 0 0 1px rgba(46, 213, 115, 0.2), 0 4px 24px rgba(0, 0, 0, 0.5), 0 0 12px rgba(46, 213, 115, 0.06);
+}
+
 /* Glow effects */
 .glow-smaragd {
   box-shadow: var(--glow-smaragd);
@@ -213,6 +221,27 @@ input, textarea, select {
 .counter-animate {
   will-change: transform;
   font-variant-numeric: tabular-nums;
+}
+
+/* Form input utility */
+.input-field {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--bg-surface-border);
+  background: var(--bg-surface-light);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-body);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input-field:focus {
+  border-color: #2ed573;
+}
+
+.input-field option {
+  background: var(--bg-surface);
 }
 
 /* Reduced motion: disable all custom animations */

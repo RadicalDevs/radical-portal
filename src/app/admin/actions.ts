@@ -99,6 +99,7 @@ export interface AdminKandidaat {
   tags: string[];
   beschikbaarheid: boolean | null;
   notities: string | null;
+  respondentOpmerkingen: string | null;
   vetoGetriggerd: boolean;
   vetoDetails: { question_id: string; question_text: string; answer_value: number; answer_label: string }[];
 }
@@ -329,7 +330,7 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
       .limit(500),
     db
       .from("apac_resultaten")
-      .select("kandidaat_id, adaptability, personality, awareness, connection, created_at, veto_getriggerd, veto_details")
+      .select("kandidaat_id, adaptability, personality, awareness, connection, created_at, veto_getriggerd, veto_details, respondent_opmerkingen")
       .eq("is_seed", false)
       .order("created_at", { ascending: false })
       .limit(1000),
@@ -384,6 +385,7 @@ export async function getAdminKandidaten(): Promise<AdminKandidaat[]> {
       tags: [],
       beschikbaarheid: null,
       notities: null,
+      respondentOpmerkingen: (apac as Record<string, unknown>)?.respondent_opmerkingen as string | null ?? null,
       vetoGetriggerd: (apac as Record<string, unknown>)?.veto_getriggerd === true,
       vetoDetails: ((apac as Record<string, unknown>)?.veto_details ?? []) as AdminKandidaat["vetoDetails"],
     };
@@ -994,6 +996,8 @@ const FormConfigSchema = z.object({
       .map((e) => e.trim())
       .filter((e) => e.length > 0 && e.includes("@"))
   ),
+  show_comments_field: z.boolean().default(true),
+  comments_field_label: z.string().max(500).default("Anything else you want to share?"),
 });
 
 export type FormConfigResult =
@@ -1015,6 +1019,8 @@ export async function updateFormConfig(
     thankyou_body: formData.get("thankyou_body"),
     require_lastname: formData.get("require_lastname") === "true",
     notification_emails: formData.get("notification_emails") ?? "",
+    show_comments_field: formData.get("show_comments_field") === "true",
+    comments_field_label: formData.get("comments_field_label") || "Anything else you want to share?",
   });
 
   if (!parsed.success) {
@@ -1176,6 +1182,78 @@ export async function getQuestionAnalytics(
   });
 
   return { questions: analyticsItems, totalRespondents, totalPortal, totalTally, totalManual };
+}
+
+// ---------------------------------------------------------------------------
+// 10b. Respondent opmerkingen — comments overzicht voor Vraag Analyse
+// ---------------------------------------------------------------------------
+
+export interface RespondentComment {
+  kandidaatId: string;
+  naam: string;
+  email: string;
+  comment: string;
+  date: string;
+}
+
+export async function getRespondentComments(
+  period?: "week" | "month" | "all"
+): Promise<RespondentComment[]> {
+  const db = createServiceClient();
+
+  let sinceDate: string | null = null;
+  if (period === "week") {
+    sinceDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  } else if (period === "month") {
+    sinceDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  let query = db
+    .from("apac_resultaten")
+    .select("kandidaat_id, respondent_opmerkingen, created_at")
+    .not("respondent_opmerkingen", "is", null)
+    .eq("is_seed", false)
+    .order("created_at", { ascending: false });
+
+  if (sinceDate) {
+    query = query.gte("created_at", sinceDate);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    console.error("[getRespondentComments] error:", error);
+    return [];
+  }
+
+  // Haal kandidaat-namen op
+  const kandidaatIds = [...new Set(data.map((r) => r.kandidaat_id).filter(Boolean))];
+  const kandidaatMap = new Map<string, { naam: string; email: string }>();
+  if (kandidaatIds.length > 0) {
+    const { data: kandidaten } = await db
+      .from("kandidaten")
+      .select("id, voornaam, achternaam, email")
+      .in("id", kandidaatIds);
+    for (const k of kandidaten ?? []) {
+      kandidaatMap.set(k.id, {
+        naam: [k.voornaam, k.achternaam].filter(Boolean).join(" ").trim() || k.email,
+        email: k.email,
+      });
+    }
+  }
+
+  return data
+    .filter((r) => r.respondent_opmerkingen?.trim())
+    .map((r) => {
+      const k = kandidaatMap.get(r.kandidaat_id);
+      return {
+        kandidaatId: r.kandidaat_id,
+        naam: k?.naam ?? "Onbekend",
+        email: k?.email ?? "",
+        comment: r.respondent_opmerkingen!,
+        date: r.created_at,
+      };
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1501,12 +1579,12 @@ export async function sendKandidaatEmail(
   const escapedBody = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const html = `<div style="font-family:Inter,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto">
     <div style="background:linear-gradient(135deg,#0D0D14 0%,#13131F 100%);padding:20px 28px;border-radius:8px 8px 0 0">
-      <h2 style="color:#2ed573;margin:0;font-size:18px;font-weight:700">Radical Portal</h2>
+      <h2 style="color:#2ed573;margin:0;font-size:18px;font-weight:700">Radical Network</h2>
     </div>
     <div style="padding:24px 28px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
       <div style="white-space:pre-wrap;font-size:14px;color:#374151;line-height:1.7">${escapedBody}</div>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0 12px">
-      <p style="color:#aaa;font-size:11px;margin:0">Radical Portal — radicalportal.nl</p>
+      <p style="color:#aaa;font-size:11px;margin:0">Radical Network — radicalnetwork.nl</p>
     </div>
   </div>`;
 
@@ -1749,7 +1827,6 @@ export async function adminUploadCv(
     beschrijving: "CV geüpload door admin",
   }).then(undefined, () => {});
 
-  revalidatePath("/admin/candidates");
   return { success: true, cvUrl: storagePath };
 }
 

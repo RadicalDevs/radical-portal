@@ -338,11 +338,11 @@ function ThresholdInput({
       <input
         name={name}
         type="number"
-        step="0.1"
+        step="1"
         min="0"
-        max="10"
+        max="200"
         defaultValue={defaultValue ?? ""}
-        placeholder="0–10 (leeg = geen drempel)"
+        placeholder="0–50 per dim / 0–200 totaal (leeg = geen drempel)"
         disabled={disabled}
         className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-body placeholder:text-muted focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         style={{ "--tw-ring-color": color } as React.CSSProperties}

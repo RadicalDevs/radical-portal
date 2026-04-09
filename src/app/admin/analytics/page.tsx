@@ -2,7 +2,7 @@ import { getAnalyticsData } from "../actions";
 import AnalyticsClient from "./AnalyticsClient";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Analytics — Radical Portal" };
+export const metadata = { title: "Analytics — Radical Network" };
 
 export default async function AdminAnalyticsPage() {
   const data = await getAnalyticsData();

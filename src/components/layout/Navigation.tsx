@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 export default function Navigation() {
   const pathname = usePathname();
@@ -13,6 +14,7 @@ export default function Navigation() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [hasCompletedTest, setHasCompletedTest] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { lang, setLang, t } = useLanguage();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -28,6 +30,7 @@ export default function Navigation() {
         const { data: portalUser } = await supabase
           .from("portal_users")
           .select("kandidaat_id")
+          .eq("auth_user_id", data.session.user.id)
           .single();
         if (portalUser?.kandidaat_id) {
           const { data: scores } = await supabase
@@ -63,16 +66,16 @@ export default function Navigation() {
 
   const navLinks = isAdmin
     ? [
-        { href: "/admin", label: "Dashboard" },
-        { href: "/admin/candidates", label: "Kandidaten" },
-        { href: "/admin/poort", label: "De Poort" },
+        { href: "/admin", label: t("nav_dashboard") },
+        { href: "/admin/candidates", label: t("nav_candidates") },
+        { href: "/admin/poort", label: t("nav_gate") },
       ]
     : isLoggedIn
     ? [
-        { href: "/dashboard", label: "Dashboard" },
-        { href: "/dashboard/results", label: "Resultaten" },
-        ...(hasCompletedTest ? [{ href: "/dashboard/support", label: "Coaching" }] : []),
-        { href: "/dashboard/profile", label: "Profiel" },
+        { href: "/dashboard", label: t("nav_dashboard") },
+        { href: "/dashboard/results", label: t("nav_results") },
+        ...(hasCompletedTest ? [{ href: "/dashboard/support", label: t("nav_coaching") }] : []),
+        { href: "/dashboard/profile", label: t("nav_profile") },
       ]
     : [];
 
@@ -82,7 +85,7 @@ export default function Navigation() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <span className="font-heading text-lg font-bold text-heading sm:text-xl">
-            Radical<span className="gradient-text">Portal</span>
+            Radical<span className="gradient-text">{t("brand_suffix")}</span>
           </span>
         </Link>
 
@@ -105,13 +108,37 @@ export default function Navigation() {
             );
           })}
           <div className="ml-2 flex items-center gap-1 border-l border-surface-border pl-2">
+            {/* Language toggle */}
+            <div className="flex items-center gap-0.5 rounded-lg px-1 py-1">
+              <button
+                onClick={() => setLang("en")}
+                className={`rounded px-1.5 py-0.5 text-xs font-bold transition-all ${
+                  lang === "en"
+                    ? "text-smaragd"
+                    : "text-muted hover:text-heading"
+                }`}
+              >
+                EN
+              </button>
+              <span className="text-muted/40 text-xs">|</span>
+              <button
+                onClick={() => setLang("nl")}
+                className={`rounded px-1.5 py-0.5 text-xs font-bold transition-all ${
+                  lang === "nl"
+                    ? "text-smaragd"
+                    : "text-muted hover:text-heading"
+                }`}
+              >
+                NL
+              </button>
+            </div>
             <ThemeToggle />
             {isLoggedIn === true && (
               <button
                 onClick={handleLogout}
                 className="rounded-lg px-3 py-1.5 text-sm font-medium text-muted transition-all duration-200 hover:bg-surface-light hover:text-heading"
               >
-                Uitloggen
+                {t("nav_logout")}
               </button>
             )}
             {isLoggedIn === false && (
@@ -119,7 +146,7 @@ export default function Navigation() {
                 href="/auth/login"
                 className="rounded-lg bg-smaragd/10 px-3 py-1.5 text-sm font-medium text-smaragd transition-all duration-200 hover:bg-smaragd/20"
               >
-                Inloggen
+                {t("nav_login")}
               </Link>
             )}
           </div>
@@ -127,12 +154,32 @@ export default function Navigation() {
 
         {/* Mobile: theme toggle + hamburger (visible on mobile only) */}
         <div className="flex items-center gap-2 md:hidden">
+          {/* Language toggle mobile */}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setLang("en")}
+              className={`rounded px-1.5 py-0.5 text-xs font-bold transition-all ${
+                lang === "en" ? "text-smaragd" : "text-muted"
+              }`}
+            >
+              EN
+            </button>
+            <span className="text-muted/40 text-xs">|</span>
+            <button
+              onClick={() => setLang("nl")}
+              className={`rounded px-1.5 py-0.5 text-xs font-bold transition-all ${
+                lang === "nl" ? "text-smaragd" : "text-muted"
+              }`}
+            >
+              NL
+            </button>
+          </div>
           <ThemeToggle />
           {navLinks.length > 0 && (
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className="flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-light hover:text-heading"
-              aria-label={menuOpen ? "Menu sluiten" : "Menu openen"}
+              aria-label={menuOpen ? t("nav_menu_close") : t("nav_menu_open")}
             >
               {menuOpen ? (
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -151,7 +198,7 @@ export default function Navigation() {
               href="/auth/login"
               className="rounded-lg bg-smaragd/10 px-3 py-1.5 text-sm font-medium text-smaragd transition-all duration-200 hover:bg-smaragd/20"
             >
-              Inloggen
+              {t("nav_login")}
             </Link>
           )}
         </div>
@@ -182,7 +229,7 @@ export default function Navigation() {
                 onClick={handleLogout}
                 className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-muted transition-all hover:bg-surface-light hover:text-heading"
               >
-                Uitloggen
+                {t("nav_logout")}
               </button>
             )}
             {isLoggedIn === false && (
@@ -190,7 +237,7 @@ export default function Navigation() {
                 href="/auth/login"
                 className="block rounded-lg bg-smaragd/10 px-3 py-2.5 text-center text-sm font-medium text-smaragd transition-all hover:bg-smaragd/20"
               >
-                Inloggen
+                {t("nav_login")}
               </Link>
             )}
           </div>

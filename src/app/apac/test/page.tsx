@@ -4,7 +4,7 @@ import ApacTestClient from "./ApacTestClient";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "APAC Test — Radical Portal",
+  title: "APAC Test — Radical Network",
 };
 
 export default async function ApacTestPage() {

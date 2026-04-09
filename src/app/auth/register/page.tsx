@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import RegisterClient from "./RegisterClient";
 
 export const metadata = {
-  title: "Account aanmaken — Radical Portal",
+  title: "Account aanmaken — Radical Network",
 };
 
 export default function RegisterPage() {
@@ -16,18 +16,6 @@ export default function RegisterPage() {
       {/* Card */}
       <div className="relative w-full max-w-md">
         <div className="glass rounded-2xl p-8 shadow-xl">
-          <div className="text-center">
-            <p className="font-heading text-2xl font-bold">
-              Radical<span className="gradient-text">Portal</span>
-            </p>
-            <h1 className="mt-3 font-heading text-xl font-bold text-heading">
-              Account aanmaken
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              Krijg toegang tot je APAC-resultaten en coaching.
-            </p>
-          </div>
-
           <Suspense fallback={<div className="mt-8 h-96" />}>
             <RegisterClient />
           </Suspense>

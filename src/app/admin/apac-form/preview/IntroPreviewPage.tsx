@@ -24,6 +24,8 @@ const FALLBACK: ApacFormConfig = {
   thankyou_body: "Je hebt de APAC-test voltooid. Hieronder zie je je persoonlijk profiel.",
   require_lastname: false,
   notification_emails: [],
+  show_comments_field: true,
+  comments_field_label: "Anything else you want to share?",
 };
 
 type Stage = "intro" | "questions" | "done";
